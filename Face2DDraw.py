@@ -1,12 +1,15 @@
 import pygame
 import os
 import math
+from dataclasses import dataclass
 
 CAM_X = 350
 CAM_Y = 100
 CAM_W = 600
 CAM_H = 500
 FPS = 30
+L_BLINK_THRESHOLD = 0.25
+R_BLINK_THRESHOLD = 0.2
 
 # 用來做平滑移動 (避免抖動)
 current_dx = 0.0
@@ -78,10 +81,30 @@ def draw_eye_masked(screen, white_img, pupil_img, pupil_offset):
     screen.blit(temp_surf, (screen_x, screen_y))
 
 
+@dataclass
+class TrackingResult:
+    pupilsX : float = 0
+    pupilsY : float = 0
+    blinkL: float = 0
+    blinkR: float = 0
+
+def map_range(value, in_min, in_max, out_min, out_max):
+    """
+    將數值從一個區間映射到另一個區間，並限制範圍 (Clamp)
+    例如: 把 0.25(閉) ~ 0.5(開) 映射成 0.0 ~ 1.0
+    """
+    # 1. 先計算原始比例
+    slope = (out_max - out_min) / (in_max - in_min)
+    output = out_min + slope * (value - in_min)
+    
+    # 2. 限制範圍 (Clamp)，確保不會出現負數或超過 1.0
+    return max(out_min, min(out_max, output))
+
 class Face2DDraw:
     def __init__(self, isFake: bool, screen):
         self.isFake = isFake
         self.screen = screen
+        self.calibration = (0,0)
         self.debug_font = pygame.font.SysFont("Arial", 24) # 或 "Consolas"
         self.components = {
             "img_face"        : load_img("Face.png"),
@@ -91,31 +114,61 @@ class Face2DDraw:
             "img_eye_pupil_R" : load_img("EyePupilR.png"),
             "img_eye_lash_L"  : load_img("EyeLashL.png"),
             "img_eye_lash_R"  : load_img("EyeLashR.png"),
+            "img_eye_lash_close_L"  : load_img("EyeLashLClose.png"),
+            "img_eye_lash_close_R"  : load_img("EyeLashRClose.png"),
             "img_eyebrow_L"   : load_img("EyeBrowL.png"),
             "img_eyebrow_R"   : load_img("EyeBrowR.png"),
             "img_hair_front"  : load_img("HairFront.png")
         }
-    def draw(self, iris_pos, calibration):
-        calibration_x,calibration_y = calibration
-        #mouse_x, mouse_y = pygame.mouse.get_pos() # 暫時用滑鼠測試
-        target_dx, target_dy = iris_pos
+    def setCalib(self,calibration):
+        self.calibration = calibration
+    def extractPupilsOffSet(self, result:TrackingResult):
+        calibration_x,calibration_y = self.calibration
+        target_dx, target_dy = result.pupilsX,result.pupilsY
         target_dx -= calibration_x
         target_dy -= calibration_y
-        offset_x,offset_y = evaluatePupilOffset(target_dx, target_dy,self.isFake)
-
-        for pattern,comp in self.components.items():
-            if "pupil" in pattern:
-                if pattern == "img_eye_pupil_L":
-                    draw_eye_masked(self.screen, self.components["img_eye_white_L"], \
-                                    comp, (offset_x,offset_y))
-                elif pattern == "img_eye_pupil_R":
-                    draw_eye_masked(self.screen, self.components["img_eye_white_R"], \
-                                    comp, (offset_x,offset_y))
-            else:
-                blitComponent(self.screen, comp)
         debug_text = f"X: {target_dx:.2f}| {calibration_x:.2f}  Y: {target_dy:.2f}"
         color = (255, 0, 0) if (target_dx == 0 and target_dy == 0) else (0, 0, 255)
         text_surf = self.debug_font.render(debug_text, True, color)
         help_text = self.debug_font.render("Press 'C' to Center Eyes", True, (50, 50, 50))
         self.screen.blit(text_surf, (10, 10)) # 畫在左上角
         self.screen.blit(help_text, (10, 40))
+        return evaluatePupilOffset(target_dx, target_dy,self.isFake)
+
+    def drawEyePupils(self, result:TrackingResult, mode):
+        offset = self.extractPupilsOffSet(result)
+
+        comps = self.components
+        if "L" in mode:
+            draw_eye_masked(self.screen, comps["img_eye_white_L"], \
+                            comps["img_eye_pupil_L"], offset)
+        if "R" in mode:
+            draw_eye_masked(self.screen, comps["img_eye_white_R"], \
+                            comps["img_eye_pupil_R"], offset)
+
+    def drawEye(self, result: TrackingResult):
+        comps = self.components
+        screen = self.screen
+
+        if  result.blinkL < L_BLINK_THRESHOLD:
+            blitComponent(screen, comps["img_eye_lash_close_L"])
+        else:
+            blitComponent(screen, comps["img_eye_white_L"])
+            blitComponent(screen, comps["img_eye_lash_L"])
+            self.drawEyePupils(result, "L")
+
+        if result.blinkR < R_BLINK_THRESHOLD:
+            blitComponent(screen, comps["img_eye_lash_close_R"])
+        else:
+            blitComponent(screen, comps["img_eye_white_R"])
+            blitComponent(screen, comps["img_eye_lash_R"])
+            self.drawEyePupils(result, "R")
+        print(f"{result.blinkL:.3f} | {result.blinkR:.3f}")
+    def draw(self, result: TrackingResult):
+        comps = self.components
+        screen = self.screen
+        blitComponent(screen, comps["img_face"])
+        self.drawEye(result=result)
+        blitComponent(screen, comps["img_eyebrow_L"])
+        blitComponent(screen, comps["img_eyebrow_R"])
+        blitComponent(screen, comps["img_hair_front"])

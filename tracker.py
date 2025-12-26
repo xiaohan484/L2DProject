@@ -27,23 +27,22 @@ class FaceTracker:
         self.cap = cv2.VideoCapture(0)
     def isFake(self):
         return False
+    def process(self):
+        success, image = self.cap.read()
+        image.flags.writeable = False
+        cv2.imshow("tracking result", image)
+        cv2.waitKey(1)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        self.results = self.face_mesh.process(image)
+        return 
     def get_iris_pos(self):
         """
         回傳眼球的相對位置 (x, y)
         x: -1.0 (左) ~ 1.0 (右), 0.0 是中間
         y: -1.0 (上) ~ 1.0 (下), 0.0 是中間
         """
-        success, image = self.cap.read()
-        if not success:
-            return 0, 0 # 讀不到畫面時回傳歸零
-
-        # 效能優化：標記唯讀可以加速 MediaPipe 處理
-        image.flags.writeable = False
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        results = self.face_mesh.process(image)
-
+        results = self.results
         dx, dy = 0, 0
-
         if results.multi_face_landmarks:
             landmarks = results.multi_face_landmarks[0].landmark
             
@@ -88,6 +87,43 @@ class FaceTracker:
             dy = -max(-1.0, min(1.0, dy))
 
         return dx, dy
+
+    def get_eye_blink_ratio(self):
+        """
+        計算左右眼的開闔程度 (Blink Ratio)
+        回傳: (left_ratio, right_ratio)
+        數值通常在 0.0 (閉) ~ 0.3 (大開) 之間
+        """
+        results = self.results
+        left_ratio = 1.0
+        right_ratio = 1.0
+
+        if results.multi_face_landmarks:
+            landmarks = results.multi_face_landmarks[0].landmark
+
+            # --- 左眼關鍵點 (MediaPipe 的左眼對應畫面右側) ---
+            # 垂直: 159 (上), 145 (下)
+            # 水平: 33 (內), 133 (外)
+            l_top = landmarks[159].y
+            l_bot = landmarks[145].y
+            l_in  = landmarks[33].x
+            l_out = landmarks[133].x
+            
+            # 計算垂直距離 / 水平距離 (標準化，避免離鏡頭遠近影響數值)
+            # 加上一個極小的數 1e-6 避免除以零
+            left_ratio = abs(l_bot - l_top) / (abs(l_out - l_in) + 1e-6)
+
+            # --- 右眼關鍵點 ---
+            # 垂直: 386 (上), 374 (下)
+            # 水平: 362 (內), 263 (外)
+            r_top = landmarks[386].y
+            r_bot = landmarks[374].y
+            r_in  = landmarks[362].x
+            r_out = landmarks[263].x
+            
+            right_ratio = abs(r_bot - r_top) / (abs(r_out - r_in) + 1e-6)
+
+        return left_ratio, right_ratio
 
     def release(self):
         self.cap.release()

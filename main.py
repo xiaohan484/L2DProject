@@ -1,6 +1,6 @@
 import pygame
 from tracker import FaceTracker,FakeTracker
-from Face2DDraw import Face2DDraw
+from Face2DDraw import Face2DDraw, TrackingResult
 
 # --- 設定區 ---
 CAM_X = 350
@@ -20,8 +20,9 @@ pygame.display.set_caption("My VTuber v0.1")
 screen = pygame.display.set_mode((CAM_W, CAM_H))
 clock = pygame.time.Clock()
 
-tracker = FakeTracker() #FaceTracker()
-face_drawer = Face2DDraw(isFake=tracker.isFake,screen=screen)
+#tracker = FakeTracker() #FaceTracker()
+tracker = FaceTracker() #FaceTracker()
+face_drawer = Face2DDraw(isFake=tracker.isFake(),screen=screen)
 
 def loop(func):
     def wrapper():
@@ -35,21 +36,23 @@ def loop(func):
                     running = False
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_c:
                     # 取得當下原始的眼睛位置，設為新的零點
-                    raw_dx, raw_dy = tracker.get_iris_pos()
-                    global calibration_x,calibration_y
-                    calibration_x = raw_dx
-                    calibration_y = raw_dy
-                    print(f"已校正中心點: ({calibration_x:.2f}, {calibration_y:.2f})")
+                    face_drawer.setCalib(tracker.get_iris_pos())
                 
             screen.fill((0, 255, 0)) # 填滿綠色背景 (Green Screen)
-            func((calibration_x,calibration_y))
+            func()
             pygame.display.flip()
             clock.tick(FPS)
     return wrapper
 
+import cv2
 @loop
-def refresh(calibration):
-    face_drawer.draw(tracker.get_iris_pos(), calibration)
+def refresh():
+    tracker.process()
+
+    result = TrackingResult()
+    result.pupilsX ,result.pupilsY = tracker.get_iris_pos()
+    result.blinkL ,result.blinkR = tracker.get_eye_blink_ratio()
+    face_drawer.draw(result)
 
 # --- 主迴圈 ---
 refresh()
