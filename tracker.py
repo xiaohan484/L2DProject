@@ -1,7 +1,8 @@
 import cv2
 import mediapipe as mp
 import numpy as np
-import pygame
+import time
+import threading
 
 class FakeTracker:
     def __init__(self):
@@ -127,3 +128,62 @@ class FaceTracker:
 
     def release(self):
         self.cap.release()
+class AsyncFaceTracker:
+    """
+    非同步追蹤器：用獨立執行緒跑 OpenCV，
+    確保主視窗被 Windows 卡住時 (例如拖曳視窗)，追蹤不會中斷。
+    """
+    def __init__(self):
+        # 建立原本的 Tracker
+        self._tracker = FaceTracker()
+        
+        # 共享變數 (加上 Lock 避免讀寫衝突，雖然 Python GIL 某種程度上會保護)
+        self.lock = threading.Lock()
+        self._current_iris_pos = (0.0, 0.0)
+        self._current_blink_ratio = (1.0, 1.0)
+        self._current_head_pose = (0.0, 0.0)
+        
+        self.running = True
+        
+        # 建立並啟動執行緒
+        self.thread = threading.Thread(target=self._update_loop, daemon=True)
+        self.thread.start()
+
+    def _update_loop(self):
+        """這是背景執行緒在做的事：不斷更新數據"""
+        while self.running:
+            self._tracker.process()
+            # 1. 取得數據 (這一步最耗時，現在不會卡住 UI 了)
+            dx, dy = self._tracker.get_iris_pos()
+            bl, br = self._tracker.get_eye_blink_ratio()
+            #yaw, pitch = self._tracker.get_head_pose()
+            
+            # 2. 存入共享變數
+            with self.lock:
+                self._current_iris_pos = (dx, dy)
+                self._current_blink_ratio = (bl, br)
+                #self._current_head_pose = (yaw, pitch)
+            
+            # 稍微休息一下，避免吃光 CPU (約 60 FPS)
+            time.sleep(0.016)
+
+    # --- 外部呼叫的介面 (讀取最新值) ---
+    # 這些函式會由 Main Thread (UI) 呼叫，速度極快，因為只是讀變數
+    
+    def get_iris_pos(self):
+        with self.lock:
+            return self._current_iris_pos
+
+    def get_eye_blink_ratio(self):
+        with self.lock:
+            return self._current_blink_ratio
+
+    def get_head_pose(self):
+        with self.lock:
+            return self._current_head_pose
+
+    def release(self):
+        self.running = False
+        if self.thread.is_alive():
+            self.thread.join()
+        self._tracker.release()

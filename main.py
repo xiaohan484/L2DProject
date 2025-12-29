@@ -48,7 +48,6 @@ import cv2
 @loop
 def refresh():
     tracker.process()
-
     result = TrackingResult()
     result.pupilsX ,result.pupilsY = tracker.get_iris_pos()
     result.blinkL ,result.blinkR = tracker.get_eye_blink_ratio()
