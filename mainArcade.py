@@ -58,6 +58,8 @@ class MyGame(arcade.Window):
             sprite.base_local_y = base_y
             sprite.local_x = base_x
             sprite.local_y = base_y
+            sprite.initial_global_x = raw_global_x
+            sprite.initial_global_y = raw_global_yal_y = raw_global_y
         else:
             ## 如果是根節點 (Root)，直接放在畫面中間 (或你想要的位置)
             ## 這裡我們稍微 hack 一下，把 JSON 裡的座標 mapping 到螢幕中心
@@ -74,7 +76,7 @@ class MyGame(arcade.Window):
             # 如果設為 SCREEN_HEIGHT / 2，臉的正中心會在畫面正中心。
             # 如果想讓下巴多露出一點，可以減去一個數字 (例如 -50)
             # 如果想讓頭頂多露出一點，可以加上一個數字 (例如 +50)
-            sprite.center_y = SCREEN_HEIGHT / 2  # 試著改成 +50 或 -50 看看效果
+            sprite.center_y = SCREEN_HEIGHT / 2 - 950 * GLOBAL_SCALE # 試著改成 +50 或 -50 看看效果
             # 記錄初始絕對座標 (這兩行不變)
             sprite.initial_global_x = raw_global_x
             sprite.initial_global_y = raw_global_yal_y = raw_global_y
@@ -87,12 +89,11 @@ class MyGame(arcade.Window):
         # --- 1. 建立根節點 (Face) ---
         # 假設你的 JSON 裡臉部叫做 "face" (如果不一樣請修改 key)
         # body
-        self.face = self.create_vt_sprite("Face",append=False) 
-        self.body = self.create_vt_sprite("Body",parent=self.face)
-        self.all_sprites.append(self.face)
+        self.body = self.create_vt_sprite("Body")
 
         # --- 2. 建立五官 (綁定在 Face 上) ---
         # 程式會自動算出它們相對於臉的 local_x/y
+        self.face = self.create_vt_sprite("Face",parent=self.body,append=False) 
         
         # 眼白 (底)
         self.eye_white_L = self.create_vt_sprite("EyeWhiteL", parent=self.face)
@@ -101,6 +102,8 @@ class MyGame(arcade.Window):
         # 眼珠 (中)
         self.eye_pupil_L = self.create_vt_sprite("EyePupilL", parent=self.face)
         self.eye_pupil_R = self.create_vt_sprite("EyePupilR", parent=self.face)
+
+        self.all_sprites.append(self.face)
         
         # 睫毛 (上)
         self.eye_lash_L = self.create_vt_sprite("EyeLashL", parent=self.face)
@@ -120,6 +123,20 @@ class MyGame(arcade.Window):
             self.calibration = self.tracker.get_iris_pos()
             print(self.calibration)
     def on_update(self, delta_time):
+        # 呼吸頻率 (速度)
+        BREATH_SPEED = 1.5
+        # 呼吸幅度 (縮放比例，不用太大，0.01 代表 1%)
+        BREATH_AMOUNT = 0.0025
+        import time
+
+        # 利用時間算出一個 -1 ~ 1 的波形
+        breath_wave = math.sin(time.time() * BREATH_SPEED)
+
+        # 應用在身體 (Root) 的 Y 軸縮放
+        # 1.0 是原始大小，加上波形變化
+        self.body.scale_y = GLOBAL_SCALE + breath_wave * BREATH_AMOUNT
+        self.body.scale_x = GLOBAL_SCALE + breath_wave * (BREATH_AMOUNT * 0.1) # X軸稍微跟著動一點點會更自然
+
         blinkL, blinkR = self.tracker.get_eye_blink_ratio()
         is_blinking = (blinkL < 0.33) or (blinkR < 0.33)
         final_x, final_y = convertPupils(self.tracker.get_iris_pos(), self.calibration, is_blinking)
@@ -127,7 +144,8 @@ class MyGame(arcade.Window):
         self.eye_pupil_R.local_x = self.eye_pupil_R.base_local_x + final_x
         self.eye_pupil_L.local_y = self.eye_pupil_L.base_local_y + final_y
         self.eye_pupil_R.local_y = self.eye_pupil_R.base_local_y + final_y
-        self.face.update_transform()
+        # 記得觸發更新
+        self.body.update_transform()
         
 
 if __name__ == "__main__":
