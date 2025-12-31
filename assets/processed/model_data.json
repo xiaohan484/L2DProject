@@ -20,11 +20,11 @@
   "EyeLashL": {
     "filename": "EyeLashL.png",
     "original_width": 74,
-    "original_height": 33,
+    "original_height": 24,
     "global_center_x": 567,
     "global_center_y": 344,
-    "anchor_x": 0.5946,
-    "anchor_y": 0.9697
+    "anchor_x": 0.5135,
+    "anchor_y": 0.0833
   },
   "EyeLashLClose": {
     "filename": "EyeLashLClose.png",
@@ -64,21 +64,21 @@
   },
   "EyeWhiteL": {
     "filename": "EyeWhiteL.png",
-    "original_width": 54,
+    "original_width": 58,
     "original_height": 31,
-    "global_center_x": 570,
+    "global_center_x": 568,
     "global_center_y": 349,
-    "anchor_x": 0.6296,
-    "anchor_y": 0.9355
+    "anchor_x": 0.569,
+    "anchor_y": 0.4516
   },
   "EyeWhiteR": {
     "filename": "EyeWhiteR.png",
-    "original_width": 58,
+    "original_width": 62,
     "original_height": 46,
-    "global_center_x": 675,
+    "global_center_x": 677,
     "global_center_y": 358,
-    "anchor_x": 0.5862,
-    "anchor_y": 0.6087
+    "anchor_x": 0.5323,
+    "anchor_y": 0.2826
   },
   "Face": {
     "filename": "Face.png",
@@ -86,7 +86,7 @@
     "original_height": 466,
     "global_center_x": 626,
     "global_center_y": 378,
-    "anchor_x": 0.497,
+    "anchor_x": 0.5,
     "anchor_y": 0.7361
   },
   "HairFront": {
@@ -100,12 +100,12 @@
   },
   "EyeLashR": {
     "filename": "EyeLashR.png",
-    "original_width": 70,
-    "original_height": 37,
+    "original_width": 69,
+    "original_height": 28,
     "global_center_x": 681,
-    "global_center_y": 345,
-    "anchor_x": 0.4286,
-    "anchor_y": 0.9189
+    "global_center_y": 341,
+    "anchor_x": 0.4348,
+    "anchor_y": 0.3571
   },
   "Body": {
     "filename": "Body.png",
@@ -115,5 +115,23 @@
     "global_center_y": 1293,
     "anchor_x": 0.497,
     "anchor_y": 0.1182
+  },
+  "EyeLidR": {
+    "filename": "EyeLidR.png",
+    "original_width": 73,
+    "original_height": 73,
+    "global_center_x": 671,
+    "global_center_y": 314,
+    "anchor_x": 0.274,
+    "anchor_y": 0.7534
+  },
+  "EyeLidL": {
+    "filename": "EyeLidL.png",
+    "original_width": 73,
+    "original_height": 74,
+    "global_center_x": 572,
+    "global_center_y": 317,
+    "anchor_x": 0.7534,
+    "anchor_y": 0.7297
   }
 }

@@ -5,13 +5,14 @@ from Const import *
 from VTSprite import *
 import arcade
 from tracker import AsyncFaceTracker
+from ValueUtils import *
 
 class MyGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
 
         self.tracker = AsyncFaceTracker()
-        self.calibration = (0,0)
+        self.calibration = (-0.28554,0.1093026)
 
         arcade.set_background_color(arcade.color.GREEN)
         self.all_sprites = arcade.SpriteList()
@@ -93,7 +94,8 @@ class MyGame(arcade.Window):
 
         # --- 2. 建立五官 (綁定在 Face 上) ---
         # 程式會自動算出它們相對於臉的 local_x/y
-        self.face = self.create_vt_sprite("Face",parent=self.body,append=False) 
+        self.face = self.create_vt_sprite("Face",parent=self.body) 
+        #self.all_sprites.append(self.face)
         
         # 眼白 (底)
         self.eye_white_L = self.create_vt_sprite("EyeWhiteL", parent=self.face)
@@ -103,15 +105,16 @@ class MyGame(arcade.Window):
         self.eye_pupil_L = self.create_vt_sprite("EyePupilL", parent=self.face)
         self.eye_pupil_R = self.create_vt_sprite("EyePupilR", parent=self.face)
 
-        self.all_sprites.append(self.face)
+        self.eye_lid_L = self.create_vt_sprite("EyeLidL", parent=self.face)
+        self.eye_lid_R = self.create_vt_sprite("EyeLidR", parent=self.face)
         
         # 睫毛 (上)
         self.eye_lash_L = self.create_vt_sprite("EyeLashL", parent=self.face)
         self.eye_lash_R = self.create_vt_sprite("EyeLashR", parent=self.face)
 
         #
-        self.eye_lash_L = self.create_vt_sprite("EyeBrowL", parent=self.face)
-        self.eye_lash_R = self.create_vt_sprite("EyeBrowR", parent=self.face)
+        self.eye_brow_L = self.create_vt_sprite("EyeBrowL", parent=self.face)
+        self.eye_brow_R = self.create_vt_sprite("EyeBrowR", parent=self.face)
         
         # 前髮 (最上層)
         self.hair_front = self.create_vt_sprite("HairFront", parent=self.face)
@@ -140,10 +143,46 @@ class MyGame(arcade.Window):
         blinkL, blinkR = self.tracker.get_eye_blink_ratio()
         is_blinking = (blinkL < 0.33) or (blinkR < 0.33)
         final_x, final_y = convertPupils(self.tracker.get_iris_pos(), self.calibration, is_blinking)
+
+        # pupils
         self.eye_pupil_L.local_x = self.eye_pupil_L.base_local_x + final_x
         self.eye_pupil_R.local_x = self.eye_pupil_R.base_local_x + final_x
         self.eye_pupil_L.local_y = self.eye_pupil_L.base_local_y + final_y
         self.eye_pupil_R.local_y = self.eye_pupil_R.base_local_y + final_y
+
+        #EyeLid
+        target_y_L = map_range(blinkL, EAR_MIN, EAR_MAX, EYE_CLOSED_Y, EYE_OPEN_Y)
+        target_y_R = map_range(blinkR, EAR_MIN, EAR_MAX, EYE_CLOSED_Y, EYE_OPEN_Y)
+        self.eye_lid_L.local_y = self.eye_lid_L.base_local_y + target_y_L
+        self.eye_lid_R.local_y = self.eye_lid_R.base_local_y + target_y_R
+
+        self.eye_lash_L.local_y = self.eye_lash_L.base_local_y + target_y_L
+        self.eye_lash_R.local_y = self.eye_lash_R.base_local_y + target_y_R
+
+        close_progressL = map_range(blinkL, EAR_MIN, EAR_MAX, 1.0, 0.0)
+        close_progressR = map_range(blinkR, EAR_MIN, EAR_MAX, 1.0, 0.0)
+        target_scale_y_L = 1.0 - (close_progressL *0.4) 
+        target_scale_y_R = 1.0 - (close_progressR *0.4) 
+        #print(target_scale_y_L,target_scale_y_R)
+
+        if blinkL < EAR_MIN:
+            self.eye_lash_L.local_scale_y = -1 * target_scale_y_L
+            self.eye_white_L.local_scale_y = 0
+            self.eye_pupil_L.local_scale_y = 0
+        else:
+            self.eye_lash_L.local_scale_y = 1 * target_scale_y_L
+            self.eye_white_L.local_scale_y = 1
+            self.eye_pupil_L.local_scale_y = 1
+
+        if blinkR < EAR_MIN:
+            self.eye_lash_R.local_scale_y = -1 * target_scale_y_R
+            self.eye_white_R.local_scale_y = 0
+            self.eye_pupil_R.local_scale_y = 0
+        else:
+            self.eye_lash_R.local_scale_y = 1 *target_scale_y_R
+            self.eye_white_R.local_scale_y = 1
+            self.eye_pupil_R.local_scale_y = 1
+
         # 記得觸發更新
         self.body.update_transform()
         

@@ -9,6 +9,13 @@ SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 SCREEN_TITLE = "My VTuber v0.2"
 MODEL_DATA = {}
+
+EYE_OPEN_Y  = 0.0
+EYE_CLOSED_Y  = 15.0
+
+EAR_MIN = 0.2
+EAR_MAX = 0.35
+
 try:
     with open("assets/processed/model_data.json", "r", encoding="utf-8") as f:
         MODEL_DATA = json.load(f)

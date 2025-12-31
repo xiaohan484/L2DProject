@@ -20,6 +20,8 @@ class VTSprite(arcade.Sprite):
         self.base_local_y = 0
         
         # 這些是 "相對" 於父物件的屬性 (Local Transform)
+        self.local_scale_x = 1.0
+        self.local_scale_y = 1.0
         self.local_x = 0
         self.local_y = 0
         self.local_angle = 0
