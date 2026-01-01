@@ -31,5 +31,4 @@ assets/models/
 
 # Output recordings
 *.mp4
-*.gif
 output/

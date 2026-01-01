@@ -18,12 +18,16 @@ Unlike standard solutions that rely on Unity or heavy game engines, my goal is t
 * **Signal Processing:** One Euro Filter (for jitter reduction)
 * **Rendering:** [Arcade / ...]
 
+![Demo GIF] assets/demo_preview.gif
+
+WIP Prototype: Real-time eye blinking and eye tracking driven by live facial landmark data. (Note: Actual face input video is not shown for privacy reasons.)
+
 ## 🗺️ Roadmap
 
 <details>
 <summary><strong>Phase 1: Let it moves (Current Focus)</strong></summary>
 
-- Basic Face Detection (OpenCV)
+- Basic Face Detection (MediaPipe)
     - [x] Async Tracking
 
 - 2D character movement
