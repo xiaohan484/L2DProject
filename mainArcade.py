@@ -31,7 +31,7 @@ class MyGame(arcade.Window):
             return arcade.Sprite() # 回傳空物件避免當機
 
         data = MODEL_DATA[name]
-        filepath = os.path.join("assets/processed", data['filename'])
+        filepath = os.path.join("assets/sample_model/processed", data['filename'])
         # 1. 建立 Sprite
         sprite = VTSprite(filepath, scale=GLOBAL_SCALE, parent=parent, data_key=name) # scale 可全域調整
         

@@ -7,8 +7,8 @@ from tkinter import filedialog
 from jsonUtils import *
 
 # 設定
-INPUT_DIR = "assets/raw"       # 放原本的全畫布 PNG
-OUTPUT_DIR = "assets/processed" # 這裡會吐出裁切後的 PNG 和 JSON
+INPUT_DIR = "assets/sample_model/raw"       # 放原本的全畫布 PNG
+OUTPUT_DIR = "assets/sample_model/processed" # 這裡會吐出裁切後的 PNG 和 JSON
 CONFIG_FILE = "model_data.json" # 最終存檔
 
 # 確保輸出目錄存在

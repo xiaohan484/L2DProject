@@ -1,0 +1,31 @@
+# Python standard ignores
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Distribution / Packaging
+build/
+dist/
+*.egg-info/
+
+# IDE settings (VS Code, JetBrains)
+.vscode/
+.idea/
+
+# Live2D Assets (CRITICAL: Do not upload proprietary models)
+*.moc3
+*.model3.json
+*.physics3.json
+*.pose3.json
+*.userdata3.json
+textures/
+assets/models/
+!assets/sample_model/
+# Only allow your own README or sample assets if created by you
+
+# Output recordings
+*.mp4
+*.gif
+output/

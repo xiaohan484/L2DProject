@@ -17,7 +17,7 @@ EAR_MIN = 0.2
 EAR_MAX = 0.35
 
 try:
-    with open("assets/processed/model_data.json", "r", encoding="utf-8") as f:
+    with open("assets/sample_model/processed/model_data.json", "r", encoding="utf-8") as f:
         MODEL_DATA = json.load(f)
 except FileNotFoundError:
     print("❌ 找不到 model_data.json，請先執行 tools/cropper.py")
