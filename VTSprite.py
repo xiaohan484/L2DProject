@@ -100,3 +100,13 @@ def convertPupils(target, calibration, blinking):
         final_x = raw_x
         final_y = raw_y
     return final_x,final_y
+
+filter_blink_l = OneEuroFilter(min_cutoff=0.1, beta=50.0)
+filter_blink_r = OneEuroFilter(min_cutoff=0.1, beta=100.0)
+def filterBlink(blink):
+    import time
+    current_time = time.time()
+    blinkL, blinkR = blink
+    blinkL = filter_blink_l(current_time, blinkL)
+    blinkR = filter_blink_r(current_time, blinkR)
+    return blinkL,blinkR

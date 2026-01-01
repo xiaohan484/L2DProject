@@ -140,7 +140,7 @@ class MyGame(arcade.Window):
         self.body.scale_y = GLOBAL_SCALE + breath_wave * BREATH_AMOUNT
         self.body.scale_x = GLOBAL_SCALE + breath_wave * (BREATH_AMOUNT * 0.1) # X軸稍微跟著動一點點會更自然
 
-        blinkL, blinkR = self.tracker.get_eye_blink_ratio()
+        blinkL, blinkR = filterBlink(self.tracker.get_eye_blink_ratio())
         is_blinking = (blinkL < 0.33) or (blinkR < 0.33)
         final_x, final_y = convertPupils(self.tracker.get_iris_pos(), self.calibration, is_blinking)
 
@@ -182,6 +182,8 @@ class MyGame(arcade.Window):
             self.eye_lash_R.local_scale_y = 1 *target_scale_y_R
             self.eye_white_R.local_scale_y = 1
             self.eye_pupil_R.local_scale_y = 1
+        yaw,pitch,roll = self.tracker.get_head_pose()
+        print(yaw,pitch,roll)
 
         # 記得觸發更新
         self.body.update_transform()
