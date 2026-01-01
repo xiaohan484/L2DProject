@@ -13,6 +13,7 @@ dist/
 # IDE settings (VS Code, JetBrains)
 .vscode/
 .idea/
+*.lock
 
 # Live2D Assets (CRITICAL: Do not upload proprietary models)
 *.moc3
@@ -20,6 +21,9 @@ dist/
 *.physics3.json
 *.pose3.json
 *.userdata3.json
+*.kra
+*.kra~
+*.png~
 textures/
 assets/models/
 !assets/sample_model/
