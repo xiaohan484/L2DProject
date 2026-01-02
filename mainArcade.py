@@ -125,25 +125,86 @@ class MyGame(arcade.Window):
         if key == arcade.key.C:
             self.calibration = self.tracker.get_iris_pos()
             print(self.calibration)
-    def on_update(self, delta_time):
+    def update_body(self):
         # 呼吸頻率 (速度)
         BREATH_SPEED = 1.5
         # 呼吸幅度 (縮放比例，不用太大，0.01 代表 1%)
         BREATH_AMOUNT = 0.0025
         import time
-
         # 利用時間算出一個 -1 ~ 1 的波形
         breath_wave = math.sin(time.time() * BREATH_SPEED)
-
         # 應用在身體 (Root) 的 Y 軸縮放
         # 1.0 是原始大小，加上波形變化
         self.body.scale_y = GLOBAL_SCALE + breath_wave * BREATH_AMOUNT
         self.body.scale_x = GLOBAL_SCALE + breath_wave * (BREATH_AMOUNT * 0.1) # X軸稍微跟著動一點點會更自然
+        return
+    def update_pose(self):
+        yaw,pitch,roll = filterHead(self.tracker.get_head_pose())
+        # 2. 定義強度 (這就是你要一直調的參數)
+        # 代表轉 1 度，像素要移動多少 px
+        PARALLAX_X_STRENGTH = 0.25
+        PARALLAX_Y_STRENGTH = 0.5
+
+        # 3. 計算各層的位移量 (Offset)
+        # Layer Depth Multipliers (深度乘數)
+        # 前面動得快，後面動得慢
+        OFFSET_FRONT = 1.0001  # 前髮、五官
+        OFFSET_MID   = 1.0     # 臉型
+        OFFSET_BACK  = 0.9999  # 後髮
+
+        # 計算 X 軸位移
+        move_x_front = yaw * PARALLAX_X_STRENGTH * OFFSET_FRONT
+        move_x_mid   = yaw * PARALLAX_X_STRENGTH * OFFSET_MID
+        move_x_back  = yaw * PARALLAX_X_STRENGTH * OFFSET_BACK
+        # 計算 Y 軸位移
+        move_y_front = pitch * PARALLAX_Y_STRENGTH * OFFSET_FRONT
+        move_y_mid   = pitch * PARALLAX_Y_STRENGTH * OFFSET_MID
+        move_y_back  = pitch * PARALLAX_Y_STRENGTH * OFFSET_BACK
+
+        # 4. 應用到 Sprites (記得加上原本的基礎位置)
+        # 假設 base_x 是螢幕中心
+        self.face_features_center_x = move_x_front
+        self.face_base_center_x     = move_x_mid
+        self.back_hair_center_x     = move_x_back
+
+        self.face_features_center_y = move_y_front
+        self.face_base_center_y     = move_y_mid
+        self.back_hair_center_y     = move_y_back
+
+        self.body.local_x = self.body.base_local_x + move_x_back
+        self.face.local_x = self.face.base_local_x + move_x_mid
+        self.eye_white_L.local_x = self.eye_white_L.base_local_x + move_x_front
+        self.eye_white_R.local_x = self.eye_white_R.base_local_x + move_x_front
+        self.eye_lid_L.local_x   =   self.eye_lid_L.base_local_x + move_x_front  
+        self.eye_lid_R.local_x   =   self.eye_lid_R.base_local_x + move_x_front  
+        self.eye_lash_L.local_x  =  self.eye_lash_L.base_local_x + move_x_front 
+        self.eye_lash_R.local_x  =  self.eye_lash_R.base_local_x + move_x_front 
+        self.eye_brow_L.local_x  =  self.eye_brow_L.base_local_x + move_x_front 
+        self.eye_brow_R.local_x  =  self.eye_brow_R.base_local_x + move_x_front 
+        self.hair_front.local_x  =  self.hair_front.base_local_x + move_x_front 
+
+        self.body.local_y = self.body.base_local_y + move_y_back
+        self.face.local_y = self.face.base_local_y + move_y_mid
+        self.eye_white_L.local_y = self.eye_white_L.base_local_y + move_y_front
+        self.eye_white_R.local_y = self.eye_white_R.base_local_y + move_y_front
+        self.eye_lid_L.local_y   =   self.eye_lid_L.base_local_y + move_y_front  
+        self.eye_lid_R.local_y   =   self.eye_lid_R.base_local_y + move_y_front  
+        self.eye_lash_L.local_y  =  self.eye_lash_L.base_local_y + move_y_front 
+        self.eye_lash_R.local_y  =  self.eye_lash_R.base_local_y + move_y_front 
+        self.eye_brow_L.local_y  =  self.eye_brow_L.base_local_y + move_y_front 
+        self.eye_brow_R.local_y  =  self.eye_brow_R.base_local_y + move_y_front 
+        self.hair_front.local_y  =  self.hair_front.base_local_y + move_y_front 
+
+    def on_update(self, delta_time):
+        self.update_body()
+        self.update_pose()
+
 
         blinkL, blinkR = filterBlink(self.tracker.get_eye_blink_ratio())
-        is_blinking = (blinkL < 0.33) or (blinkR < 0.33)
+        is_blinking = (blinkL < 0.25) or (blinkR < 0.25)
         final_x, final_y = convertPupils(self.tracker.get_iris_pos(), self.calibration, is_blinking)
-
+        final_x += self.face_features_center_x
+        final_y += self.face_features_center_y
         # pupils
         self.eye_pupil_L.local_x = self.eye_pupil_L.base_local_x + final_x
         self.eye_pupil_R.local_x = self.eye_pupil_R.base_local_x + final_x
@@ -153,9 +214,10 @@ class MyGame(arcade.Window):
         #EyeLid
         target_y_L = map_range(blinkL, EAR_MIN, EAR_MAX, EYE_CLOSED_Y, EYE_OPEN_Y)
         target_y_R = map_range(blinkR, EAR_MIN, EAR_MAX, EYE_CLOSED_Y, EYE_OPEN_Y)
+        target_y_L += self.face_features_center_y
+        target_y_R += self.face_features_center_y
         self.eye_lid_L.local_y = self.eye_lid_L.base_local_y + target_y_L
         self.eye_lid_R.local_y = self.eye_lid_R.base_local_y + target_y_R
-
         self.eye_lash_L.local_y = self.eye_lash_L.base_local_y + target_y_L
         self.eye_lash_R.local_y = self.eye_lash_R.base_local_y + target_y_R
 
@@ -182,9 +244,6 @@ class MyGame(arcade.Window):
             self.eye_lash_R.local_scale_y = 1 *target_scale_y_R
             self.eye_white_R.local_scale_y = 1
             self.eye_pupil_R.local_scale_y = 1
-        yaw,pitch,roll = self.tracker.get_head_pose()
-        print(yaw,pitch,roll)
-
         # 記得觸發更新
         self.body.update_transform()
         

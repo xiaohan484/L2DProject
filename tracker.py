@@ -39,7 +39,17 @@ class FaceTracker:
             (-225.0, -170.0, 135.0),     # Left eye left corner (眼睛在上面 -> Y是負的)
             (225.0, -170.0, 135.0),      # Right eye right corner
             (-150.0, 150.0, 125.0),      # Left Mouth corner (嘴巴在下面 -> Y是正的)
-            (150.0, 150.0, 125.0)        # Right Mouth corner
+            (150.0, 150.0, 125.0),        # Right Mouth corner
+
+            ## --- [新增] 穩定錨點 ---
+            #(-60.0, -170.0, 100.0),      # 7. Left Eye Inner Corner (內眼角) - 靠鼻樑
+            #(60.0, -170.0, 100.0),       # 8. Right Eye Inner Corner (內眼角) - 靠鼻樑
+
+            ## --- [修正] 9, 10 眉峰/額頭 (位置較高，且稍微深一點) ---
+            ## Y 設為 300.0 (比眼睛 170 高)
+            ## X 設為 180.0 (寬度適中)
+            #(-180.0, -300.0, 100.0),     # 9. 左眉峰 (對應 105)
+            #(180.0, -300.0, 100.0)       # 10. 右眉峰 (對應 334)
         ], dtype=np.float64)
         
         # 相機矩陣 (之後在 process 裡初始化一次即可)
@@ -170,15 +180,20 @@ class FaceTracker:
 
         # 1. 從 MediaPipe 提取對應的 6 個 2D 關鍵點
         # 注意：MediaPipe 的點是正規化的 (0~1)，要乘上寬高
-        # Index: Nose=1, Chin=152, L_Eye=33, R_Eye=266, L_Mouth=61, R_Mouth=291
+        # Index: Nose=1, Chin=152, L_Eye=33, R_Eye=263, L_Mouth=61, R_Mouth=291
     
         image_points = np.array([
             (face_landmarks.landmark[1].x * img_w, face_landmarks.landmark[1].y * img_h),     # Nose tip
             (face_landmarks.landmark[152].x * img_w, face_landmarks.landmark[152].y * img_h), # Chin
             (face_landmarks.landmark[33].x * img_w, face_landmarks.landmark[33].y * img_h),   # Left Eye
-            (face_landmarks.landmark[266].x * img_w, face_landmarks.landmark[266].y * img_h), # Right Eye
+            (face_landmarks.landmark[263].x * img_w, face_landmarks.landmark[263].y * img_h), # Right Eye
             (face_landmarks.landmark[61].x * img_w, face_landmarks.landmark[61].y * img_h),   # Left Mouth
-            (face_landmarks.landmark[291].x * img_w, face_landmarks.landmark[291].y * img_h)  # Right Mouth
+            (face_landmarks.landmark[291].x * img_w, face_landmarks.landmark[291].y * img_h),  # Right Mouth
+            # --- [新增] ---
+            #(face_landmarks.landmark[362].x * img_w, face_landmarks.landmark[362].y * img_h), # 7. 左內眼角
+            #(face_landmarks.landmark[133].x * img_w, face_landmarks.landmark[133].y * img_h), # 8. 右內眼角
+            #(face_landmarks.landmark[105].x * img_w, face_landmarks.landmark[105].y * img_h),  # 9. 左眉尾 (這點相對穩定)
+            #(face_landmarks.landmark[334].x * img_w, face_landmarks.landmark[334].y * img_h)  # 10. 右眉尾
         ], dtype="double")
 
         # 2. 呼叫 SolvePnP
@@ -187,7 +202,7 @@ class FaceTracker:
             image_points, 
             self.cam_matrix, 
             self.dist_coeffs, 
-            flags=cv2.SOLVEPNP_ITERATIVE
+            flags=cv2.SOLVEPNP_SQPNP
         )
 
         # 3. 將旋轉向量轉換為歐拉角 (Euler Angles)
@@ -204,9 +219,9 @@ class FaceTracker:
         pitch = angles[0]  # 轉換比例微調 (視需求調整強度)
         yaw   = angles[1]
         roll  = angles[2] 
-        pitch = max(-90, min(90, pitch))
-        yaw   = max(-90, min(90, yaw))
-        roll  = max(-90, min(90, roll))
+        #pitch = max(-90, min(90, pitch))
+        #yaw   = max(-90, min(90, yaw))
+        #roll  = max(-90, min(90, roll))
 
         # 這裡的數值通常很敏感，可能需要限制範圍 (Clamp)
         # 顯示視窗
@@ -219,6 +234,17 @@ class FaceTracker:
             # 畫出鼻尖 (紅色大點) 作為參考中心
             if len(frontal_points) > 1:
                  cv2.circle(debug_board, frontal_points[1], 3, (0, 0, 255), -1)
+                 cv2.circle(debug_board, frontal_points[152], 3, (0, 0, 255), -1)
+                 cv2.circle(debug_board, frontal_points[33], 3, (0, 0, 255), -1)
+                 cv2.circle(debug_board, frontal_points[263], 3, (0, 0, 255), -1)
+                 cv2.circle(debug_board, frontal_points[61], 3, (0, 0, 255), -1)
+                 cv2.circle(debug_board, frontal_points[291], 3, (0, 0, 255), -1)
+
+                 #cv2.circle(debug_board, frontal_points[362], 3, (0, 0, 255), -1)
+                 #cv2.circle(debug_board, frontal_points[133], 3, (0, 0, 255), -1)
+                 #cv2.circle(debug_board, frontal_points[105], 3, (0, 0, 255), -1)
+                 #cv2.circle(debug_board, frontal_points[334], 3, (0, 0, 255), -1)
+
             # 顯示視窗
             cv2.imshow("Debug: Frontalized View", debug_board)
             cv2.waitKey(1)

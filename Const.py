@@ -13,7 +13,7 @@ MODEL_DATA = {}
 EYE_OPEN_Y  = 0.0
 EYE_CLOSED_Y  = 15.0
 
-EAR_MIN = 0.2
+EAR_MIN = 0.28
 EAR_MAX = 0.35
 
 try:
