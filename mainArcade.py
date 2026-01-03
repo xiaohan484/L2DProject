@@ -90,11 +90,15 @@ class MyGame(arcade.Window):
         # --- 1. 建立根節點 (Face) ---
         # 假設你的 JSON 裡臉部叫做 "face" (如果不一樣請修改 key)
         # body
-        self.body = self.create_vt_sprite("Body")
+        self.body = self.create_vt_sprite("Body",append=False)
+        self.back_hair = self.create_vt_sprite("BackHair", parent=self.body)
+
+        self.all_sprites.append(self.body)
 
         # --- 2. 建立五官 (綁定在 Face 上) ---
         # 程式會自動算出它們相對於臉的 local_x/y
         self.face = self.create_vt_sprite("Face",parent=self.body) 
+        self.face_landmarks = self.create_vt_sprite("FaceLandmark",parent=self.face) 
         #self.all_sprites.append(self.face)
         
         # 眼白 (底)
@@ -143,7 +147,7 @@ class MyGame(arcade.Window):
         # 2. 定義強度 (這就是你要一直調的參數)
         # 代表轉 1 度，像素要移動多少 px
         PARALLAX_X_STRENGTH = 0.25
-        PARALLAX_Y_STRENGTH = 0.5
+        PARALLAX_Y_STRENGTH = 0.6
 
         # 3. 計算各層的位移量 (Offset)
         # Layer Depth Multipliers (深度乘數)
@@ -172,7 +176,9 @@ class MyGame(arcade.Window):
         self.back_hair_center_y     = move_y_back
 
         self.body.local_x = self.body.base_local_x + move_x_back
+        self.back_hair.local_x = self.back_hair.base_local_x + move_x_back
         self.face.local_x = self.face.base_local_x + move_x_mid
+        self.face_landmarks.local_x   =   self.face_landmarks.base_local_x + move_x_front  
         self.eye_white_L.local_x = self.eye_white_L.base_local_x + move_x_front
         self.eye_white_R.local_x = self.eye_white_R.base_local_x + move_x_front
         self.eye_lid_L.local_x   =   self.eye_lid_L.base_local_x + move_x_front  
@@ -184,7 +190,9 @@ class MyGame(arcade.Window):
         self.hair_front.local_x  =  self.hair_front.base_local_x + move_x_front 
 
         self.body.local_y = self.body.base_local_y + move_y_back
+        self.back_hair.local_y = self.back_hair.base_local_y + move_y_back
         self.face.local_y = self.face.base_local_y + move_y_mid
+        self.face_landmarks.local_y   =   self.face_landmarks.base_local_y + move_y_front  
         self.eye_white_L.local_y = self.eye_white_L.base_local_y + move_y_front
         self.eye_white_R.local_y = self.eye_white_R.base_local_y + move_y_front
         self.eye_lid_L.local_y   =   self.eye_lid_L.base_local_y + move_y_front  
@@ -216,10 +224,10 @@ class MyGame(arcade.Window):
         target_y_R = map_range(blinkR, EAR_MIN, EAR_MAX, EYE_CLOSED_Y, EYE_OPEN_Y)
         target_y_L += self.face_features_center_y
         target_y_R += self.face_features_center_y
-        self.eye_lid_L.local_y = self.eye_lid_L.base_local_y + target_y_L
-        self.eye_lid_R.local_y = self.eye_lid_R.base_local_y + target_y_R
-        self.eye_lash_L.local_y = self.eye_lash_L.base_local_y + target_y_L
-        self.eye_lash_R.local_y = self.eye_lash_R.base_local_y + target_y_R
+        self.eye_lid_L.local_y = self.eye_lid_L.base_local_y +   int(target_y_L)
+        self.eye_lid_R.local_y = self.eye_lid_R.base_local_y +   int(target_y_R)
+        self.eye_lash_L.local_y = self.eye_lash_L.base_local_y + int(target_y_L)
+        self.eye_lash_R.local_y = self.eye_lash_R.base_local_y + int(target_y_R)
 
         close_progressL = map_range(blinkL, EAR_MIN, EAR_MAX, 1.0, 0.0)
         close_progressR = map_range(blinkR, EAR_MIN, EAR_MAX, 1.0, 0.0)
@@ -246,7 +254,6 @@ class MyGame(arcade.Window):
             self.eye_pupil_R.local_scale_y = 1
         # 記得觸發更新
         self.body.update_transform()
-        
 
 if __name__ == "__main__":
     # 載入設定檔

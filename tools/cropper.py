@@ -92,15 +92,15 @@ class AssetTool:
         if self.cropped_img is None: return
 
         # 3. 互動設定 Anchor
-        cv2.imshow("Set Anchor (Press SPACE to confirm)", self.cropped_img)
-        cv2.setMouseCallback("Set Anchor (Press SPACE to confirm)", self.on_mouse_click)
+        # cv2.imshow("Set Anchor (Press SPACE to confirm)", self.cropped_img)
+        # cv2.setMouseCallback("Set Anchor (Press SPACE to confirm)", self.on_mouse_click)
         
-        print(f"👉 請在視窗中點擊 {name_no_ext} 的旋轉/縮放中心 (例如瞳孔中心、脖子根部)。按空白鍵確認。")
+        #print(f"👉 請在視窗中點擊 {name_no_ext} 的旋轉/縮放中心 (例如瞳孔中心、脖子根部)。按空白鍵確認。")
         
-        while True:
-            key = cv2.waitKey(0)
-            if key == 32: # Space 鍵
-                break
+        #while True:
+        #    key = cv2.waitKey(0)
+        #    if key == 32: # Space 鍵
+        #        break
         
         cv2.destroyAllWindows()
 

@@ -14,7 +14,7 @@ EYE_OPEN_Y  = 0.0
 EYE_CLOSED_Y  = 15.0
 
 EAR_MIN = 0.28
-EAR_MAX = 0.35
+EAR_MAX = 0.32
 
 try:
     with open("assets/sample_model/processed/model_data.json", "r", encoding="utf-8") as f:
