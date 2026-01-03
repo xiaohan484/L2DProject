@@ -35,12 +35,24 @@ WIP Prototype: Real-time eye blinking and eye tracking driven by live facial lan
     - [x] Gaze (One Euro Filter)
     - [x] Breathing (Simple sin solution)
     - [x] Blinking (One Euro Filter)
-    - [ ] Head's pose mapping
 
 </details>
 
 <details>
-<summary><strong>Phase 2: Partial Mesh </strong></summary>
+<summary><strong>Phase 2: Parallax </strong></summary>
+
+- Face Detection (MediaPipe)
+    - [x] Head Pose Estimation(Yaw,Pitch)
+
+- 2D character movement
+    - [x] Head rotation
+    - [ ] Mouth
+    - [ ] Physics
+
+</details>
+
+<details>
+<summary><strong>Phase 3: Mesh </strong></summary>
 
 - Face Detection (MediaPipe)
     - [ ] LandMark Remapping(partial)
