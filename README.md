@@ -43,6 +43,7 @@ WIP Prototype: Real-time eye blinking and eye tracking driven by live facial lan
 
 - Face Detection (MediaPipe)
     - [x] Head Pose Estimation(Yaw,Pitch)
+    - [ ] Using existing Solution of the MediaPipe
 
 - 2D character movement
     - [x] Head rotation

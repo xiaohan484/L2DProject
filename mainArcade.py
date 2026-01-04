@@ -12,7 +12,7 @@ class MyGame(arcade.Window):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
 
         self.tracker = AsyncFaceTracker()
-        self.calibration = (-0.28554,0.1093026)
+        self.calibration = (-0.5867841357630763, -0.5041574138173885)
 
         arcade.set_background_color(arcade.color.GREEN)
         self.all_sprites = arcade.SpriteList()
@@ -146,8 +146,8 @@ class MyGame(arcade.Window):
         yaw,pitch,roll = filterHead(self.tracker.get_head_pose())
         # 2. 定義強度 (這就是你要一直調的參數)
         # 代表轉 1 度，像素要移動多少 px
-        PARALLAX_X_STRENGTH = 0.25
-        PARALLAX_Y_STRENGTH = 0.6
+        PARALLAX_X_STRENGTH = -0.25
+        PARALLAX_Y_STRENGTH = 0.5
 
         # 3. 計算各層的位移量 (Offset)
         # Layer Depth Multipliers (深度乘數)

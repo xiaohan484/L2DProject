@@ -27,6 +27,7 @@ dist/
 textures/
 assets/models/
 assets/history_demo/
+assets/privacy/
 !assets/sample_model/
 # Only allow your own README or sample assets if created by you
 
