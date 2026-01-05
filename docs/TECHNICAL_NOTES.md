@@ -189,6 +189,25 @@ $$
 * **結論**：挑選特徵點時，必須盡可能最大化 $z_o$ 的變異數（例如引入耳朵、眉骨等深度點），以確保即使在 $x \approx 0$ 時，第一項 $z \cdot z_o$ 仍能提供足夠的梯度訊息。
 
 #### 1.2 Choice of the Face Landmark
+
+#### 1.2.1 Choice of the LandMark
+儘量選擇 附著骨骼的特徵點，避開可張開的下巴或是可動的肌肉。
+由於深度的需求，和其他特徵點深度差最大的鼻子也挑幾個特徵點。
+
+#### 1.2.2 Output coordinate of MediaPipe
+注意MediaPipe 的輸出 是x,y,z，為正規化座標系。這是因為[0,1]對深度學習的計算相對友好，以及 獨立於解析度的性質。
+
+其中 x,y 的數值 要乘以 影像的長img_w,寬img_h。
+z的數值要乘以img_w，但由於其數值沒有考慮到透射投影，如果對精度有較大的需求，不建議使用。
+
+#### 1.2.3 Why not use transformation of MediaPipe output
+MediaPipe output 是基於標準臉型 轉換至 偵測特徵點的變化矩陣，包含了Scaling的元素，不一貼合臉型，如果目標是取得Pose 精度可能有疑慮。
+如果目標是輸出貼圖到自己臉上可能就蠻合適的。
+
+#### 1.2.4 Face LandMark Registering
+如果要註冊自己的臉模，可拍攝自己多張照片，取得每一個特徵點。
+加入PnP 的優化。(這部分應該類似SLAM技術)
+
 #### 1.3 Solver & Coordinate System
 #### 1.4 Not Implement Now But it can be better
 
