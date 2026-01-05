@@ -8,6 +8,7 @@ class VTSprite(arcade.Sprite):
     """
     def __init__(self, filename, scale=1.0, parent=None, data_key=None):
         super().__init__(filename, scale)
+        print(filename)
         self.parent = parent
         self.children = []
         if parent:
@@ -63,6 +64,44 @@ class VTSprite(arcade.Sprite):
         # 遞迴更新孩子
         for child in self.children:
             child.update_transform()
+import arcade
+
+class MouthSprite(VTSprite):
+    def __init__(self, closed_path, half_path, open_path, scale=1.0,parent=None,data_key=None):
+        # Initialize the parent Sprite with the default (closed) image
+        super().__init__(filename=closed_path, scale=scale, 
+                         parent=parent,data_key=data_key)
+        
+        # Pre-load all textures into a dictionary for fast access
+        # We use strict naming to manage states
+        self.state_textures = {
+            "closed": arcade.load_texture(closed_path),
+            "half": arcade.load_texture(half_path),
+            "open": arcade.load_texture(open_path)
+        }
+        
+        self.current_state = "closed"
+
+    def update_mouth_state(self, openness_value: float):
+        """
+        Updates the sprite texture based on the openness value (0.0 to 1.0).
+        """
+        new_state = "closed"
+        
+        # Simple threshold logic (Logic Step 2)
+        if openness_value < 0.2:
+            new_state = "closed"
+        elif openness_value < 0.6:
+            new_state = "half"
+        else:
+            new_state = "open"
+            
+        # Only swap texture if the state actually changed (Optimization)
+        if new_state != self.current_state:
+            self.texture = self.state_textures[new_state]
+            self.current_state = new_state
+            # Note: Sometimes you might need to sync hit_box if shapes differ wildly,
+            # but for mouths, it's usually fine to leave it.
 
 from filters import OneEuroFilter
 filter_eye_x = OneEuroFilter(min_cutoff=0.5, beta=0.5)
@@ -123,3 +162,10 @@ def filterHead(head_pose):
     pitch = head_pitch_filter(current_time, pitch)
     roll = head_roll_filter(current_time, roll)
     return yaw,pitch,roll
+
+if __name__ == "__main__":
+    prefix = "assets/sample_model/processed/"
+    mouth = MouthSprite(closed_path = prefix + "MouthClose.png", 
+                         half_path =prefix+"MouthHalf.png",
+                         open_path =prefix +"MouthOpen.png")
+    print(mouth.base_local_x)

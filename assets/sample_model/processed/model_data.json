@@ -143,21 +143,48 @@
     "anchor_x": 0.5,
     "anchor_y": 0.5
   },
-  "FaceLandmarkpng": {
-    "filename": "FaceLandmarkpng.png",
-    "original_width": 137,
-    "original_height": 72,
-    "global_center_x": 624,
-    "global_center_y": 394,
-    "anchor_x": 0.5,
-    "anchor_y": 0.5
-  },
   "FaceLandmark": {
     "filename": "FaceLandmark.png",
     "original_width": 137,
-    "original_height": 72,
+    "original_height": 46,
     "global_center_x": 624,
-    "global_center_y": 394,
+    "global_center_y": 381,
+    "anchor_x": 0.5,
+    "anchor_y": 0.5
+  },
+  "Mouth": {
+    "filename": "Mouth.png",
+    "original_width": 137,
+    "original_height": 72,
+    "global_center_x": 0,
+    "global_center_y": 0,
+    "anchor_x": 0.5,
+    "anchor_y": 0.5
+  },
+  "MouthClose": {
+    "filename": "MouthClose.png",
+    "original_width": 52,
+    "original_height": 27,
+    "global_center_x": 627,
+    "global_center_y": 426,
+    "anchor_x": 0.5,
+    "anchor_y": 0.5
+  },
+  "MouthHalf": {
+    "filename": "MouthHalf.png",
+    "original_width": 52,
+    "original_height": 33,
+    "global_center_x": 625,
+    "global_center_y": 428,
+    "anchor_x": 0.5,
+    "anchor_y": 0.5
+  },
+  "MouthOpen": {
+    "filename": "MouthOpen.png",
+    "original_width": 63,
+    "original_height": 52,
+    "global_center_x": 625,
+    "global_center_y": 433,
     "anchor_x": 0.5,
     "anchor_y": 0.5
   }

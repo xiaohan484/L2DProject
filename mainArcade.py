@@ -33,7 +33,15 @@ class MyGame(arcade.Window):
         data = MODEL_DATA[name]
         filepath = os.path.join("assets/sample_model/processed", data['filename'])
         # 1. 建立 Sprite
-        sprite = VTSprite(filepath, scale=GLOBAL_SCALE, parent=parent, data_key=name) # scale 可全域調整
+        if name == "Mouth":
+            data = MODEL_DATA["MouthClose"]
+            prefix = "assets/sample_model/processed/"
+            sprite = MouthSprite(closed_path = prefix + "MouthClose.png", 
+                                 half_path = prefix + "MouthHalf.png",
+                                 open_path = prefix + "MouthOpen.png",
+                                 scale=GLOBAL_SCALE, parent=parent, data_key=name) # scale 可全域調整
+        else:
+            sprite = VTSprite(filepath, scale=GLOBAL_SCALE, parent=parent, data_key=name) # scale 可全域調整
         
         # 2. 讀取錨點設定
         sprite.anchor_x_ratio = data.get('anchor_x', 0.5)
@@ -119,6 +127,8 @@ class MyGame(arcade.Window):
         #
         self.eye_brow_L = self.create_vt_sprite("EyeBrowL", parent=self.face)
         self.eye_brow_R = self.create_vt_sprite("EyeBrowR", parent=self.face)
+
+        self.mouth = self.create_vt_sprite("Mouth",parent=self.face)
         
         # 前髮 (最上層)
         self.hair_front = self.create_vt_sprite("HairFront", parent=self.face)
@@ -179,6 +189,7 @@ class MyGame(arcade.Window):
         self.back_hair.local_x = self.back_hair.base_local_x + move_x_back
         self.face.local_x = self.face.base_local_x + move_x_mid
         self.face_landmarks.local_x   =   self.face_landmarks.base_local_x + move_x_front  
+        self.mouth.local_x   =   self.mouth.base_local_x + move_x_front  
         self.eye_white_L.local_x = self.eye_white_L.base_local_x + move_x_front
         self.eye_white_R.local_x = self.eye_white_R.base_local_x + move_x_front
         self.eye_lid_L.local_x   =   self.eye_lid_L.base_local_x + move_x_front  
@@ -193,6 +204,7 @@ class MyGame(arcade.Window):
         self.back_hair.local_y = self.back_hair.base_local_y + move_y_back
         self.face.local_y = self.face.base_local_y + move_y_mid
         self.face_landmarks.local_y   =   self.face_landmarks.base_local_y + move_y_front  
+        self.mouth.local_y   =   self.mouth.base_local_y + move_y_front  
         self.eye_white_L.local_y = self.eye_white_L.base_local_y + move_y_front
         self.eye_white_R.local_y = self.eye_white_R.base_local_y + move_y_front
         self.eye_lid_L.local_y   =   self.eye_lid_L.base_local_y + move_y_front  
@@ -206,6 +218,10 @@ class MyGame(arcade.Window):
     def on_update(self, delta_time):
         self.update_body()
         self.update_pose()
+
+        mo = self.tracker.get_mouth_openness()
+        print(mo)
+        self.mouth.update_mouth_state(mo)
 
 
         blinkL, blinkR = filterBlink(self.tracker.get_eye_blink_ratio())

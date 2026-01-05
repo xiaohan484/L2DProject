@@ -4,6 +4,7 @@ import numpy as np
 import time
 import threading
 from Const import *
+from ValueUtils import *
 
 #pose_landmark_index = [1,152,33,263,61,291]
 pose_landmark_index = [1, 151,101,330,345,116,103,332,156,383, 
@@ -388,6 +389,52 @@ class FaceTracker:
 
         return dx, dy
 
+    def calculate_mouth_openness(self,image_width, image_height):
+        """
+        計算嘴巴張開比例 (MAR - Mouth Aspect Ratio)
+
+        Args:
+            landmarks: MediaPipe 返回的 normalized_landmarks (包含 x, y)
+            image_width: 畫布寬度 (用於還原座標)
+            image_height: 畫布高度
+
+        Returns:
+            float: 原始 MAR 數值 (通常在 0.0 ~ 0.5 之間)
+        """
+        results = self.results
+        if results.multi_face_landmarks is None:
+            return
+        landmarks = results.multi_face_landmarks[0].landmark
+        dx, dy = 0, 0
+        # 1. 定義關鍵點索引 (Inner Lips)
+        IDX_TOP    = 13
+        IDX_BOTTOM = 14
+        IDX_LEFT   = 61
+        IDX_RIGHT  = 291
+        print(len(landmarks))
+        # 2. 取得座標點 (將 Normalized 0~1 轉為 Pixel 座標)
+        # 注意：如果不轉 Pixel 直接用 Normalized 算也可以，但轉 Pixel 比較直觀好除錯
+        p_top    = np.array([landmarks[IDX_TOP].x * image_width,    landmarks[IDX_TOP].y * image_height])
+        p_bottom = np.array([landmarks[IDX_BOTTOM].x * image_width, landmarks[IDX_BOTTOM].y * image_height])
+        p_left   = np.array([landmarks[IDX_LEFT].x * image_width,   landmarks[IDX_LEFT].y * image_height])
+        p_right  = np.array([landmarks[IDX_RIGHT].x * image_width,  landmarks[IDX_RIGHT].y * image_height])
+
+        # 3. 計算歐幾里得距離 (Euclidean Distance)
+        # 垂直距離 (開合程度)
+        height = np.linalg.norm(p_top - p_bottom)
+
+        # 水平距離 (嘴巴寬度 - 作為分母)
+        width = np.linalg.norm(p_left - p_right)
+
+        # 4. 防呆機制 (避免除以零)
+        if width < 1e-6:
+            return 0.0
+
+        # 5. 計算比例
+        mar = height / width
+        mar = map_range(mar, 0, 0.5, 0,1)
+        return mar
+
     def get_eye_blink_ratio(self):
         """
         計算左右眼的開闔程度 (Blink Ratio)
@@ -636,6 +683,7 @@ class AsyncFaceTracker:
             # 1. 取得數據 (這一步最耗時，現在不會卡住 UI 了)
             dx, dy = self._tracker.get_iris_pos()
             bl, br = self._tracker.get_eye_blink_ratio()
+            mo = self._tracker.calculate_mouth_openness(width,height)
             yaw, pitch,roll = self._tracker.get_head_pose(width,height)
 
             
@@ -644,6 +692,7 @@ class AsyncFaceTracker:
                 self._current_iris_pos = (dx, dy)
                 self._current_blink_ratio = (bl, br)
                 self._current_head_pose = (yaw, pitch,roll)
+                self._current_mouth_openness = mo
             
             # 稍微休息一下，避免吃光 CPU (約 60 FPS)
             time.sleep(0.016)
@@ -658,6 +707,10 @@ class AsyncFaceTracker:
     def get_eye_blink_ratio(self):
         with self.lock:
             return self._current_blink_ratio
+
+    def get_mouth_openness(self):
+        with self.lock:
+            return self._current_mouth_openness
 
     def get_head_pose(self):
         with self.lock:
