@@ -1,11 +1,21 @@
-import arcade
-from Const import *
 import math
+import time
+import arcade
+from pubsub import pub
+from Const import *
+from filters import OneEuroFilter
+from ValueUtils import map_range
+
+
+def is_blinking(bl, br):
+    return bl < 0.25 or br < 0.25
+
 
 class VTSprite(arcade.Sprite):
     """
     支援父子階層與錨點的 Sprite
     """
+
     def __init__(self, filename, scale=1.0, parent=None, data_key=None):
         super().__init__(filename, scale)
         print(filename)
@@ -15,19 +25,19 @@ class VTSprite(arcade.Sprite):
             parent.children.append(self)
 
         # 儲存從 JSON 讀來的原始設定 (方便 Debug)
-        self.data_key = data_key 
+        self.data_key = data_key
 
         self.base_local_x = 0
         self.base_local_y = 0
-        
+
         # 這些是 "相對" 於父物件的屬性 (Local Transform)
         self.local_scale_x = 1.0
         self.local_scale_y = 1.0
         self.local_x = 0
         self.local_y = 0
         self.local_angle = 0
-        self.local_scale_y = 1.0 
-        
+        self.local_scale_y = 1.0
+
         # 錨點 (0.0 ~ 1.0)，預設中心
         self.anchor_x_ratio = 0.5
         self.anchor_y_ratio = 0.5
@@ -43,7 +53,7 @@ class VTSprite(arcade.Sprite):
             # 2. 計算旋轉 (父角度 + 本地角度)
             # 這裡的數學確保了 "跟著爸爸轉"
             rad = math.radians(p_angle)
-            
+
             # 旋轉公式
             rot_x = self.local_x * math.cos(rad) - self.local_y * math.sin(rad)
             rot_y = -(self.local_x * math.sin(rad) + self.local_y * math.cos(rad))
@@ -53,119 +63,183 @@ class VTSprite(arcade.Sprite):
             self.center_y = p_y + rot_y * p_scale[1]
             self.angle = p_angle + self.local_angle
             self.scale = p_scale
-            
+
             # 特別處理：眨眼縮放 (Y軸)
             self.height = self.texture.height * self.scale[1] * self.local_scale_y
-            
+
             # TODO: 這裡尚未實作 "自身錨點旋轉" (Self-Pivot)，
             # 目前旋轉是以 Sprite 中心為主。如果要讓頭部繞著脖子轉，
             # 需要再加一段 offset math，但 MVP 先這樣即可。
+        # else:
+        #    self.center_x = self.local_x
+        #    self.center_y = self.local_y
 
         # 遞迴更新孩子
         for child in self.children:
             child.update_transform()
-import arcade
+
 
 class MouthSprite(VTSprite):
-    def __init__(self, closed_path, half_path, open_path, scale=1.0,parent=None,data_key=None):
+    def __init__(
+        self, closed_path, half_path, open_path, scale=1.0, parent=None, data_key=None
+    ):
         # Initialize the parent Sprite with the default (closed) image
-        super().__init__(filename=closed_path, scale=scale, 
-                         parent=parent,data_key=data_key)
-        
+        super().__init__(
+            filename=closed_path, scale=scale, parent=parent, data_key=data_key
+        )
+
         # Pre-load all textures into a dictionary for fast access
         # We use strict naming to manage states
         self.state_textures = {
             "closed": arcade.load_texture(closed_path),
             "half": arcade.load_texture(half_path),
-            "open": arcade.load_texture(open_path)
+            "open": arcade.load_texture(open_path),
         }
-        
-        self.current_state = "closed"
 
-    def update_mouth_state(self, openness_value: float):
+        self.current_state = "closed"
+        self.openness = 0
+        pub.subscribe(self.update_mouth_state, "MouthOpenness")
+
+    def update_state(self):
         """
         Updates the sprite texture based on the openness value (0.0 to 1.0).
         """
-        new_state = "closed"
-        
         # Simple threshold logic (Logic Step 2)
-        if openness_value < 0.2:
+        if self.openness < 0.2:
             new_state = "closed"
-        elif openness_value < 0.6:
+        elif self.openness < 0.6:
             new_state = "half"
         else:
             new_state = "open"
-            
+
         # Only swap texture if the state actually changed (Optimization)
         if new_state != self.current_state:
             self.texture = self.state_textures[new_state]
             self.current_state = new_state
-            # Note: Sometimes you might need to sync hit_box if shapes differ wildly,
-            # but for mouths, it's usually fine to leave it.
 
-from filters import OneEuroFilter
-filter_eye_x = OneEuroFilter(min_cutoff=0.5, beta=0.5)
-filter_eye_y = OneEuroFilter(min_cutoff=0.5, beta=0.5)
-# Blink Linking 狀態變數
-last_valid_eye_x = 0.0
-last_valid_eye_y = 0.0
-def convertPupils(target, calibration, blinking):
-    MAX_W = 10  # 橢圓的長軸 (左右極限)
-    MAX_H = 7   # 橢圓的短軸 (上下極限)
-    dx ,dy = target
-    calibration_x,calibration_y = calibration
-    dx-= calibration_x
-    dy-= calibration_y
-    global filter_eye_x,filter_eye_y,last_valid_eye_x,last_valid_eye_y
-    if blinking:
-        dx = last_valid_eye_x
-        dy = last_valid_eye_y
-    else:
-        import time
+    def update_mouth_state(self, openness_value: float):
+        self.openness = openness_value
+
+
+class PupilsSprite(VTSprite):
+    def __init__(self, filename, scale=1.0, parent=None, data_key=None):
+        super().__init__(filename, scale, parent=parent, data_key=data_key)
+        pub.subscribe(self.update_eye_info, "EyeInfo")
+        self.filter_eye_x = OneEuroFilter(min_cutoff=0.5, beta=0.5)
+        self.filter_eye_y = OneEuroFilter(min_cutoff=0.5, beta=0.5)
+        self.last_valid_eye_x = 0.0
+        self.last_valid_eye_y = 0.0
+        self.calibration = (-0.5867841357630763, -0.5041574138173885)
+        self.x = 0
+        self.y = 0
+        self.info = None
+        self.eye_info = None
+
+    def update_eye_info(self, info):
+        self.eye_info = info
+
+    def update_state(self, add_x, add_y):
+        if self.eye_info is None:
+            return
+        bl, br = self.eye_info["Blinking"]
+        x, y = self.convertPupils(
+            self.eye_info["Pupils_Pos"], self.calibration, is_blinking(bl, br)
+        )
+        x += add_x
+        y += add_y
+        self.local_x = self.base_local_x + x
+        self.local_y = self.base_local_y + y
+
+    def convertPupils(self, target, calibration, blinking):
+        MAX_W = 10  # 橢圓的長軸 (左右極限)
+        MAX_H = 7  # 橢圓的短軸 (上下極限)
+        dx, dy = target
+        calibration_x, calibration_y = calibration
+        dx -= calibration_x
+        dy -= calibration_y
+        if blinking:
+            dx = self.last_valid_eye_x
+            dy = self.last_valid_eye_y
+        else:
+            current_time = time.time()
+            dx = self.filter_eye_x(current_time, dx)
+            dy = self.filter_eye_y(current_time, dy)
+            self.last_valid_eye_x = dx
+            self.last_valid_eye_y = dy
+
+        raw_x = dx * MAX_W
+        raw_y = dy * MAX_H
+        norm_dist = (raw_x / MAX_W) ** 2 + (raw_y / MAX_H) ** 2
+        if norm_dist > 1:
+            scale = 1 / math.sqrt(norm_dist)
+            final_x = raw_x * scale
+            final_y = raw_y * scale
+        else:
+            final_x = raw_x
+            final_y = raw_y
+        return final_x, final_y
+
+
+class LidSprite(VTSprite):
+    def __init__(self, filename, scale=1.0, parent=None, data_key=None):
+        super().__init__(filename, scale, parent=parent, data_key=data_key)
+        pub.subscribe(self.update_eye_info, "EyeInfo")
+        self.x = 0
+        self.y = 0
+        self.info = None
+        self.eye_info = None
+        if "L" in filename:
+            self.dir = "L"
+            self.filter_blink = OneEuroFilter(min_cutoff=0.1, beta=50.0)
+        else:
+            self.dir = "R"
+            self.filter_blink = OneEuroFilter(min_cutoff=0.1, beta=100.0)
+
+    def update_eye_info(self, info):
+        self.eye_info = info
+
+    def update_state(self, add_x, add_y):
+        if self.eye_info is None:
+            return
+        blinkL, blinkR = self.eye_info["Blinking"]
+        if self.dir == "L":
+            blink = blinkL
+        else:
+            blink = blinkR
         current_time = time.time()
-        dx = filter_eye_x(current_time, dx)
-        dy = filter_eye_y(current_time, dy)
-        last_valid_eye_x = dx
-        last_valid_eye_y = dy
+        blink = self.filter_blink(current_time, blinkL)
 
-    raw_x = dx * MAX_W 
-    raw_y = dy * MAX_H 
-    norm_dist = (raw_x / MAX_W)**2 + (raw_y / MAX_H)**2
-    if norm_dist > 1:
-        scale = 1 / math.sqrt(norm_dist)
-        final_x = raw_x * scale
-        final_y = raw_y * scale
-    else:
-        final_x = raw_x
-        final_y = raw_y
-    return final_x,final_y
+        # update local
+        target_y = map_range(blink, EAR_MIN, EAR_MAX, EYE_CLOSED_Y, EYE_OPEN_Y)
+        # self.local_x = self.base_local_x
+        self.local_y += target_y
 
-filter_blink_l = OneEuroFilter(min_cutoff=0.1, beta=50.0)
-filter_blink_r = OneEuroFilter(min_cutoff=0.1, beta=100.0)
-def filterBlink(blink):
-    import time
-    current_time = time.time()
-    blinkL, blinkR = blink
-    blinkL = filter_blink_l(current_time, blinkL)
-    blinkR = filter_blink_r(current_time, blinkR)
-    return blinkL,blinkR
+        close_progress = map_range(blink, EAR_MIN, EAR_MAX, 1.0, 0.0)
+        target_scale_y = 1.0 - (close_progress * 0.4)
+        return blink, target_y, target_scale_y
+
 
 # 針對頭部動作，通常 beta (速度響應) 可以設小一點，讓頭部感覺比較重、比較穩
 head_yaw_filter = OneEuroFilter(min_cutoff=10, beta=0.1)
 head_pitch_filter = OneEuroFilter(min_cutoff=10, beta=0.1)
 head_roll_filter = OneEuroFilter(min_cutoff=10, beta=0.1)
+
+
 def filterHead(head_pose):
-    import time
+
     current_time = time.time()
-    yaw,pitch,roll = head_pose
+    yaw, pitch, roll = head_pose
     yaw = head_yaw_filter(current_time, yaw)
     pitch = head_pitch_filter(current_time, pitch)
     roll = head_roll_filter(current_time, roll)
-    return yaw,pitch,roll
+    return yaw, pitch, roll
+
 
 if __name__ == "__main__":
     prefix = "assets/sample_model/processed/"
-    mouth = MouthSprite(closed_path = prefix + "MouthClose.png", 
-                         half_path =prefix+"MouthHalf.png",
-                         open_path =prefix +"MouthOpen.png")
+    mouth = MouthSprite(
+        closed_path=prefix + "MouthClose.png",
+        half_path=prefix + "MouthHalf.png",
+        open_path=prefix + "MouthOpen.png",
+    )
     print(mouth.base_local_x)

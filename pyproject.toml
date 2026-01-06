@@ -11,4 +11,14 @@ dependencies = [
     "opencv-python>=4.11.0.86",
     "protobuf<4",
     "pygame>=2.6.1",
+    "pypubsub>=4.0.7",
 ]
+
+[tool.black]
+line-length = 88         # Default is 88, you can change it to 100 or 120
+target-version = ['py310'] # Specify the Python versions to support
+include = '\.pyi?$'      # Files to include (regex)
+extend-exclude = '''     # Files or directories to exclude
+^/external/
+| ^/dist/
+'''
