@@ -70,9 +70,9 @@ class VTSprite(arcade.Sprite):
             # TODO: 這裡尚未實作 "自身錨點旋轉" (Self-Pivot)，
             # 目前旋轉是以 Sprite 中心為主。如果要讓頭部繞著脖子轉，
             # 需要再加一段 offset math，但 MVP 先這樣即可。
-        # else:
-        #    self.center_x = self.local_x
-        #    self.center_y = self.local_y
+        else:
+            self.center_x = self.local_x
+            self.center_y = self.local_y
 
         # 遞迴更新孩子
         for child in self.children:
@@ -97,17 +97,16 @@ class MouthSprite(VTSprite):
         }
 
         self.current_state = "closed"
-        self.openness = 0
-        pub.subscribe(self.update_mouth_state, "MouthOpenness")
 
-    def update_state(self):
+    def update_state(self, face_info):
         """
         Updates the sprite texture based on the openness value (0.0 to 1.0).
         """
+        openness = face_info["MouthOpenness"]
         # Simple threshold logic (Logic Step 2)
-        if self.openness < 0.2:
+        if openness < 0.2:
             new_state = "closed"
-        elif self.openness < 0.6:
+        elif openness < 0.6:
             new_state = "half"
         else:
             new_state = "open"
@@ -117,14 +116,10 @@ class MouthSprite(VTSprite):
             self.texture = self.state_textures[new_state]
             self.current_state = new_state
 
-    def update_mouth_state(self, openness_value: float):
-        self.openness = openness_value
-
 
 class PupilsSprite(VTSprite):
     def __init__(self, filename, scale=1.0, parent=None, data_key=None):
         super().__init__(filename, scale, parent=parent, data_key=data_key)
-        pub.subscribe(self.update_eye_info, "EyeInfo")
         self.filter_eye_x = OneEuroFilter(min_cutoff=0.5, beta=0.5)
         self.filter_eye_y = OneEuroFilter(min_cutoff=0.5, beta=0.5)
         self.last_valid_eye_x = 0.0
@@ -132,19 +127,13 @@ class PupilsSprite(VTSprite):
         self.calibration = (-0.5867841357630763, -0.5041574138173885)
         self.x = 0
         self.y = 0
-        self.info = None
-        self.eye_info = None
 
-    def update_eye_info(self, info):
-        self.eye_info = info
-
-    def update_state(self, add_x, add_y):
-        if self.eye_info is None:
-            return
-        bl, br = self.eye_info["Blinking"]
+    def update_state(self, face_info):
+        bl, br = face_info["Blinking"]
         x, y = self.convertPupils(
-            self.eye_info["Pupils_Pos"], self.calibration, is_blinking(bl, br)
+            face_info["PupilsPos"], self.calibration, is_blinking(bl, br)
         )
+        add_x, add_y = face_info["FaceBaseOffset"]
         x += add_x
         y += add_y
         self.local_x = self.base_local_x + x
@@ -183,25 +172,22 @@ class PupilsSprite(VTSprite):
 class LidSprite(VTSprite):
     def __init__(self, filename, scale=1.0, parent=None, data_key=None):
         super().__init__(filename, scale, parent=parent, data_key=data_key)
-        pub.subscribe(self.update_eye_info, "EyeInfo")
         self.x = 0
         self.y = 0
         self.info = None
-        self.eye_info = None
-        if "L" in filename:
+        if "LidL" in filename:
             self.dir = "L"
             self.filter_blink = OneEuroFilter(min_cutoff=0.1, beta=50.0)
         else:
             self.dir = "R"
             self.filter_blink = OneEuroFilter(min_cutoff=0.1, beta=100.0)
+        self.depend = {}
 
-    def update_eye_info(self, info):
-        self.eye_info = info
+    def set_depend(self, children):
+        self.depend = children
 
-    def update_state(self, add_x, add_y):
-        if self.eye_info is None:
-            return
-        blinkL, blinkR = self.eye_info["Blinking"]
+    def update_state(self, face_info):
+        blinkL, blinkR = face_info["Blinking"]
         if self.dir == "L":
             blink = blinkL
         else:
@@ -213,10 +199,19 @@ class LidSprite(VTSprite):
         target_y = map_range(blink, EAR_MIN, EAR_MAX, EYE_CLOSED_Y, EYE_OPEN_Y)
         # self.local_x = self.base_local_x
         self.local_y += target_y
-
         close_progress = map_range(blink, EAR_MIN, EAR_MAX, 1.0, 0.0)
         target_scale_y = 1.0 - (close_progress * 0.4)
-        return blink, target_y, target_scale_y
+        self.depend["eye_lash"].local_y += int(target_y)
+
+        if blink < EAR_MIN:
+            self.depend["eye_lash"].local_scale_y = -1 * target_scale_y
+            self.depend["eye_white"].local_scale_y = 0
+            self.depend["eye_pupil"].local_scale_y = 0
+        else:
+            self.depend["eye_lash"].local_scale_y = 1 * target_scale_y
+            self.depend["eye_white"].local_scale_y = 1
+            self.depend["eye_pupil"].local_scale_y = 1
+        return
 
 
 # 針對頭部動作，通常 beta (速度響應) 可以設小一點，讓頭部感覺比較重、比較穩

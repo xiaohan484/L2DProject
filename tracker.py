@@ -603,39 +603,17 @@ class AsyncFaceTracker:
             dx, dy = self._tracker.get_iris_pos()
             mo = self._tracker.calculate_mouth_openness(width, height)
 
-            # 2. 存入共享變數
-            with self.lock:
-                pub.sendMessage("MouthOpenness", openness_value=mo)
-                pub.sendMessage(
-                    "EyeInfo", info={"Pupils_Pos": (dx, dy), "Blinking": (bl, br)}
-                )
-
-                self._current_iris_pos = (dx, dy)
-                self._current_blink_ratio = (bl, br)
-                self._current_head_pose = (yaw, pitch, roll)
-                self._current_mouth_openness = mo
-
+            pub.sendMessage(
+                "FaceInfo",
+                face_info={
+                    "PupilsPos": (dx, dy),
+                    "Blinking": (bl, br),
+                    "MouthOpenness": mo,
+                    "Pose": (yaw, pitch, roll),
+                },
+            )
             # 稍微休息一下，避免吃光 CPU (約 60 FPS)
             time.sleep(0.016)
-
-    # --- 外部呼叫的介面 (讀取最新值) ---
-    # 這些函式會由 Main Thread (UI) 呼叫，速度極快，因為只是讀變數
-
-    def get_iris_pos(self):
-        with self.lock:
-            return self._current_iris_pos
-
-    def get_eye_blink_ratio(self):
-        with self.lock:
-            return self._current_blink_ratio
-
-    def get_mouth_openness(self):
-        with self.lock:
-            return self._current_mouth_openness
-
-    def get_head_pose(self):
-        with self.lock:
-            return self._current_head_pose
 
     def release(self):
         self.running = False

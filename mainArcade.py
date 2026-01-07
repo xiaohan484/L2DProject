@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import threading
 from Const import *
 from VTSprite import *
 import arcade
@@ -19,6 +20,13 @@ class MyGame(arcade.Window):
         arcade.set_background_color(arcade.color.GREEN)
         self.all_sprites = arcade.SpriteList()
         self.setup_scene()
+        self.face_info = None
+        self.lock = threading.Lock()
+        pub.subscribe(self.notify_face_info, "FaceInfo")
+
+    def notify_face_info(self, face_info):
+        with self.lock:
+            self.face_info = face_info
 
     def __del__(self):
         self.tracker.release()
@@ -97,14 +105,16 @@ class MyGame(arcade.Window):
 
             # 【修改點 2 & 3】重新定位根節點 (Root)
             # 如果是根節點 (臉)，把它放在視窗的正中心
-            sprite.center_x = SCREEN_WIDTH / 2
+            sprite.base_local_x = SCREEN_WIDTH / 2
             # Y 軸通常需要微調。
             # 如果設為 SCREEN_HEIGHT / 2，臉的正中心會在畫面正中心。
             # 如果想讓下巴多露出一點，可以減去一個數字 (例如 -50)
             # 如果想讓頭頂多露出一點，可以加上一個數字 (例如 +50)
-            sprite.center_y = (
+            sprite.base_local_y = (
                 SCREEN_HEIGHT / 2 - 950 * GLOBAL_SCALE
             )  # 試著改成 +50 或 -50 看看效果
+            sprite.center_x = sprite.base_local_x
+            sprite.center_y = sprite.base_local_y
             # 記錄初始絕對座標 (這兩行不變)
             sprite.initial_global_x = raw_global_x
             sprite.initial_global_y = raw_global_yal_y = raw_global_y
@@ -152,14 +162,46 @@ class MyGame(arcade.Window):
         # 前髮 (最上層)
         self.hair_front = self.create_vt_sprite("HairFront", parent=self.face)
 
+        self.eye_lid_L.set_depend(
+            children={
+                "eye_lash": self.eye_lash_L,
+                "eye_white": self.eye_white_L,
+                "eye_pupil": self.eye_pupil_L,
+            }
+        )
+        self.eye_lid_R.set_depend(
+            children={
+                "eye_lash": self.eye_lash_R,
+                "eye_white": self.eye_white_R,
+                "eye_pupil": self.eye_pupil_R,
+            }
+        )
+        self.groups = {
+            "FaceFeature": [
+                self.face_landmarks,
+                self.mouth,
+                self.eye_white_L,
+                self.eye_white_R,
+                self.eye_lid_L,
+                self.eye_lid_R,
+                self.eye_lash_L,
+                self.eye_lash_R,
+                self.eye_brow_L,
+                self.eye_brow_R,
+                self.hair_front,
+            ],
+            "FaceBase": [self.face],
+            "BackHair": [self.back_hair],
+        }
+
     def on_draw(self):
         self.clear()
         self.all_sprites.draw()
 
-    def on_key_release(self, key, modifiers):
-        if key == arcade.key.C:
-            self.calibration = self.tracker.get_iris_pos()
-            print(self.calibration)
+    # def on_key_release(self, key, modifiers):
+    # implement calibration
+    # if key == arcade.key.C:
+    #    self.calibration = self.tracker.get_iris_pos()
 
     def update_body(self):
         # 呼吸頻率 (速度)
@@ -177,11 +219,11 @@ class MyGame(arcade.Window):
         )  # X軸稍微跟著動一點點會更自然
         return
 
-    def update_pose(self):
-        yaw, pitch, roll = filterHead(self.tracker.get_head_pose())
+    def update_pose(self, face_info):
+        yaw, pitch, roll = filterHead(face_info["Pose"])
         # 2. 定義強度 (這就是你要一直調的參數)
         # 代表轉 1 度，像素要移動多少 px
-        PARALLAX_X_STRENGTH = -0.25
+        PARALLAX_X_STRENGTH = -0.4
         PARALLAX_Y_STRENGTH = 0.5
 
         # 3. 計算各層的位移量 (Offset)
@@ -202,85 +244,32 @@ class MyGame(arcade.Window):
 
         # 4. 應用到 Sprites (記得加上原本的基礎位置)
         # 假設 base_x 是螢幕中心
-        self.face_features_center_x = move_x_front
-        self.face_base_center_x = move_x_mid
-        self.back_hair_center_x = move_x_back
+        face_info["FaceFeatureOffset"] = (move_x_front, move_y_front)
+        face_info["FaceBaseOffset"] = (move_x_mid, move_y_mid)
+        face_info["BackHairOffset"] = (move_x_back, move_y_back)
 
-        self.face_features_center_y = move_y_front
-        self.face_base_center_y = move_y_mid
-        self.back_hair_center_y = move_y_back
-
+        for group, sprites in self.groups.items():
+            add_x, add_y = face_info[group + "Offset"]
+            for s in sprites:
+                s.local_x = s.base_local_x + add_x
+                s.local_y = s.base_local_y + add_y
         self.body.local_x = self.body.base_local_x + move_x_back
-        self.back_hair.local_x = self.back_hair.base_local_x + move_x_back
-        self.face.local_x = self.face.base_local_x + move_x_mid
-        self.face_landmarks.local_x = self.face_landmarks.base_local_x + move_x_front
-        self.mouth.local_x = self.mouth.base_local_x + move_x_front
-        self.eye_white_L.local_x = self.eye_white_L.base_local_x + move_x_front
-        self.eye_white_R.local_x = self.eye_white_R.base_local_x + move_x_front
-        self.eye_lid_L.local_x = self.eye_lid_L.base_local_x + move_x_front
-        self.eye_lid_R.local_x = self.eye_lid_R.base_local_x + move_x_front
-        self.eye_lash_L.local_x = self.eye_lash_L.base_local_x + move_x_front
-        self.eye_lash_R.local_x = self.eye_lash_R.base_local_x + move_x_front
-        self.eye_brow_L.local_x = self.eye_brow_L.base_local_x + move_x_front
-        self.eye_brow_R.local_x = self.eye_brow_R.base_local_x + move_x_front
-        self.hair_front.local_x = self.hair_front.base_local_x + move_x_front
-
-        self.body.local_y = self.body.base_local_y + move_y_back
-        self.back_hair.local_y = self.back_hair.base_local_y + move_y_back
-        self.face.local_y = self.face.base_local_y + move_y_mid
-        self.face_landmarks.local_y = self.face_landmarks.base_local_y + move_y_front
-        self.mouth.local_y = self.mouth.base_local_y + move_y_front
-        self.eye_white_L.local_y = self.eye_white_L.base_local_y + move_y_front
-        self.eye_white_R.local_y = self.eye_white_R.base_local_y + move_y_front
-        self.eye_lid_L.local_y = self.eye_lid_L.base_local_y + move_y_front
-        self.eye_lid_R.local_y = self.eye_lid_R.base_local_y + move_y_front
-        self.eye_lash_L.local_y = self.eye_lash_L.base_local_y + move_y_front
-        self.eye_lash_R.local_y = self.eye_lash_R.base_local_y + move_y_front
-        self.eye_brow_L.local_y = self.eye_brow_L.base_local_y + move_y_front
-        self.eye_brow_R.local_y = self.eye_brow_R.base_local_y + move_y_front
-        self.hair_front.local_y = self.hair_front.base_local_y + move_y_front
+        self.body.local_y = self.body.base_local_y - move_y_back
 
     def on_update(self, delta_time):
+        with self.lock:
+            face_info = self.face_info
+        if face_info is None:
+            return
+
         self.update_body()
-        self.update_pose()
-        self.mouth.update_state()
+        self.update_pose(face_info)
+        self.mouth.update_state(face_info)
+        self.eye_pupil_L.update_state(face_info)
+        self.eye_pupil_R.update_state(face_info)
+        self.eye_lid_L.update_state(face_info)
+        self.eye_lid_R.update_state(face_info)
 
-        self.eye_pupil_L.update_state(self.face_base_center_x, self.face_base_center_y)
-        self.eye_pupil_R.update_state(self.face_base_center_x, self.face_base_center_y)
-        blinkL, target_y_L, target_scale_y_L = self.eye_lid_L.update_state(
-            self.face_base_center_x, self.face_base_center_x
-        )
-        blinkR, target_y_R, target_scale_y_R = self.eye_lid_R.update_state(
-            self.face_base_center_x, self.face_base_center_x
-        )
-
-        # todo: set child to the lid... or set a Eye Class?
-        self.eye_lash_L.local_y += int(target_y_L)
-        self.eye_lash_R.local_y += int(target_y_R)
-
-        close_progressL = map_range(blinkL, EAR_MIN, EAR_MAX, 1.0, 0.0)
-        close_progressR = map_range(blinkR, EAR_MIN, EAR_MAX, 1.0, 0.0)
-        target_scale_y_L = 1.0 - (close_progressL * 0.4)
-        target_scale_y_R = 1.0 - (close_progressR * 0.4)
-        # print(target_scale_y_L,target_scale_y_R)
-
-        if blinkL < EAR_MIN:
-            self.eye_lash_L.local_scale_y = -1 * target_scale_y_L
-            self.eye_white_L.local_scale_y = 0
-            self.eye_pupil_L.local_scale_y = 0
-        else:
-            self.eye_lash_L.local_scale_y = 1 * target_scale_y_L
-            self.eye_white_L.local_scale_y = 1
-            self.eye_pupil_L.local_scale_y = 1
-
-        if blinkR < EAR_MIN:
-            self.eye_lash_R.local_scale_y = -1 * target_scale_y_R
-            self.eye_white_R.local_scale_y = 0
-            self.eye_pupil_R.local_scale_y = 0
-        else:
-            self.eye_lash_R.local_scale_y = 1 * target_scale_y_R
-            self.eye_white_R.local_scale_y = 1
-            self.eye_pupil_R.local_scale_y = 1
         # 記得觸發更新
         self.body.update_transform()
 
