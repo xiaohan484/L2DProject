@@ -187,5 +187,14 @@
     "global_center_y": 433,
     "anchor_x": 0.5,
     "anchor_y": 0.5
+  },
+  "FrontHairShadow": {
+    "filename": "FrontHairShadow.png",
+    "original_width": 228,
+    "original_height": 439,
+    "global_center_x": 624,
+    "global_center_y": 394,
+    "anchor_x": 0.5,
+    "anchor_y": 0.5
   }
 }

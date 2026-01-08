@@ -25,7 +25,7 @@ WIP Prototype: Real-time eye blinking and eye tracking driven by live facial lan
 ## 🗺️ Roadmap
 
 <details>
-<summary><strong>Phase 1: Let it moves (Current Focus)</strong></summary>
+<summary><strong>Phase 1: Let it moves </strong></summary>
 
 - Basic Face Detection (MediaPipe)
     - [x] Async Tracking
@@ -39,7 +39,7 @@ WIP Prototype: Real-time eye blinking and eye tracking driven by live facial lan
 </details>
 
 <details>
-<summary><strong>Phase 2: Parallax </strong></summary>
+<summary><strong>Phase 2: Parallax(Current Focus) </strong></summary>
 
 - Face Detection (MediaPipe)
     - [x] Head Pose Estimation(Yaw,Pitch)
@@ -51,7 +51,6 @@ WIP Prototype: Real-time eye blinking and eye tracking driven by live facial lan
 - 2D character movement
     - [x] Head rotation
     - [x] Mouth
-    - [ ] Physics
 
 </details>
 

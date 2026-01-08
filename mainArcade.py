@@ -160,6 +160,9 @@ class MyGame(arcade.Window):
         self.mouth = self.create_vt_sprite("Mouth", parent=self.face)
 
         # 前髮 (最上層)
+        self.hair_front_shadow = self.create_vt_sprite(
+            "FrontHairShadow", parent=self.face
+        )
         self.hair_front = self.create_vt_sprite("HairFront", parent=self.face)
 
         self.eye_lid_L.set_depend(
@@ -190,6 +193,7 @@ class MyGame(arcade.Window):
                 self.eye_brow_R,
                 self.hair_front,
             ],
+            "FrontShadow": [self.hair_front_shadow],
             "FaceBase": [self.face],
             "BackHair": [self.back_hair],
         }
@@ -232,18 +236,22 @@ class MyGame(arcade.Window):
         OFFSET_FRONT = 1.0001  # 前髮、五官
         OFFSET_MID = 1.0  # 臉型
         OFFSET_BACK = 0.9999  # 後髮
+        OFFSET_FRONT_SHADOW = 0.5
 
         # 計算 X 軸位移
+        move_x_front_shadow = yaw * PARALLAX_X_STRENGTH * OFFSET_FRONT_SHADOW
         move_x_front = yaw * PARALLAX_X_STRENGTH * OFFSET_FRONT
         move_x_mid = yaw * PARALLAX_X_STRENGTH * OFFSET_MID
         move_x_back = yaw * PARALLAX_X_STRENGTH * OFFSET_BACK
         # 計算 Y 軸位移
+        move_y_front_shadow = pitch * PARALLAX_Y_STRENGTH * OFFSET_FRONT_SHADOW
         move_y_front = pitch * PARALLAX_Y_STRENGTH * OFFSET_FRONT
         move_y_mid = pitch * PARALLAX_Y_STRENGTH * OFFSET_MID
         move_y_back = pitch * PARALLAX_Y_STRENGTH * OFFSET_BACK
 
         # 4. 應用到 Sprites (記得加上原本的基礎位置)
         # 假設 base_x 是螢幕中心
+        face_info["FrontShadowOffset"] = (move_x_front_shadow, move_y_front_shadow)
         face_info["FaceFeatureOffset"] = (move_x_front, move_y_front)
         face_info["FaceBaseOffset"] = (move_x_mid, move_y_mid)
         face_info["BackHairOffset"] = (move_x_back, move_y_back)
