@@ -1,44 +1,34 @@
-📋 Python VTuber Engine - Project Handover Protocol
+# 📋 Python VTuber Engine - Project Handover Protocol
 【專案核心定義】
 
-目標： 開發一個 自製的 VTuber 渲染引擎 (非使用 VTube Studio/Unity)。
 
-渲染庫： Python + arcade (或未來的 OpenGL/ModernGL)。
+## level 3 開發路徑圖 (Roadmap)
+我們將這個階段拆解為四個里程碑：
 
-核心邏輯： MediaPipe (偵測) -> OpenCV/NumPy (數學計算) -> arcade (繪圖/圖層操作)。
+### Step 1: The Grid (網格生成) 🛠️
 
-當前階段： Level 2 - 2.5D Sprite Animation (圖層視差 + 圖庫切換)。
+目標：捨棄 arcade.Sprite。學會如何用 Python 生成一組 N x M 的頂點資料 (Vertices) 與 紋理座標 (UVs)，並讓 arcade 把它畫出來。
 
-未來階段： Level 3 - Mesh Deformation (自製網格變形引擎)。
+產出：能在螢幕上看到一張被切分成很多格子的圖片（Wireframe 模式或正常顯示）。
 
-【已完成技術模組 (The Assets)】
+### Step 2: The Wiggle (基礎變形) 🌊
 
-眼部系統： 虹膜追蹤 (Gaze) 與 眨眼偵測 (EAR)，數值已就緒。
+目標：證明我們能「動」它。
 
-高精度姿態 (The PnP Engine)：
+實作：對頂點套用簡單的 Sin/Cos 波形函數。
 
-已完成「個人化臉模」校正 (鼻尖原點)。
+產出：看到頭髮像旗幟一樣飄動（雖然很不自然，但證明引擎活了）。
 
-已透過「逆向剛體變換」驗證 PnP 的旋轉 (rvec) 是物理正確的。
+### Step 3: The Control (控制點系統) 🎮
 
-價值： 這組 rvec 將被用來驅動圖層視差，而不僅僅是轉頭。
+目標：實作 FFD (Free-Form Deformation) 的簡化版。
 
-【當前開發規劃 (Roadmap)】
+實作：我們不能手調幾百個點。我們要定義 4-9 個「控制點 (Control Points)」，用插值算法 (Interpolation) 來驅動整個網格。
 
-Step 1: 圖層視差 (Parallax) - [進行中]
+產出：拉動一個點，整條頭髮平滑彎曲。
 
-原理： 利用 PnP 算出的 rvec (Yaw/Pitch)，計算「後髮」、「臉」、「前髮」的相對位移 (dx, dy)。
+### Step 4: Integration (物理與參數掛載) 🔗
 
-目的： 創造 2.5D 的立體感，這是 Level 2 引擎的核心靈魂。
+目標：將之前的 PnP (頭轉) 與 物理 (彈簧) 數值，掛載到 Step 3 的控制點上。
 
-Step 2: 嘴部系統 (Mouth) - [下一步]
-
-策略： 暫緩 Mesh 變形。採用 「圖庫切換法 (Sprite Swapping)」。
-
-實作： 準備閉嘴、微張、全開等 Sprite，根據開合數值切換。
-
-需求： 仍需實作 calibrate_mouth 來計算 0.0~1.0 的開合參數。
-
-Step 3: 自製 Mesh 引擎 (Level 3) - [遠期目標]
-
-策略： 當 Sprite 效果到達極限後，再切入 OpenGL Shader 與頂點變形。目前先以完成「能動的角色」為優先。
+產出：真正的 Live2D 效果——頭髮隨頭部轉動而柔順甩動。
