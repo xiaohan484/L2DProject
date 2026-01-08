@@ -7,6 +7,8 @@ import mediapipe as mp
 import numpy as np
 from Const import *
 from ValueUtils import *
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
 # pose_landmark_index = [1,152,33,263,61,291]
 pose_landmark_index = [
@@ -204,12 +206,24 @@ class FaceTracker:
     def __init__(self):
         self.mp_face_mesh = mp.solutions.face_mesh
         # refine_landmarks=True 是關鍵，這樣才會回傳瞳孔(Iris)的座標
-        self.face_mesh = self.mp_face_mesh.FaceMesh(
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
+        base_options = python.BaseOptions(
+            model_asset_path="mediapipe_model/face_landmarker.task"
         )
+        options = vision.FaceLandmarkerOptions(
+            base_options=base_options,
+            running_mode=mp.tasks.vision.RunningMode.LIVE_STREAM,
+            output_face_blendshapes=True,
+            output_facial_transformation_matrixes=False,
+            num_faces=1,
+            result_callback=self.store_result,
+        )
+        self.detector = vision.FaceLandmarker.create_from_options(options)
+        # self.face_mesh = self.mp_face_mesh.FaceMesh(
+        #    max_num_faces=1,
+        #    refine_landmarks=True,
+        #    min_detection_confidence=0.5,
+        #    min_tracking_confidence=0.5,
+        # )
         self.cap = cv2.VideoCapture(0)
 
         # --- [新增] Head Pose Estimation 需要的參數 ---
@@ -245,9 +259,17 @@ class FaceTracker:
         self.cam_matrix = None
         self.dist_coeffs = np.zeros((4, 1))  # 假設無鏡頭變形.VideoCapture(0)
         self.first = True
+        self.results = None
 
-    def isFake(self):
-        return False
+    def store_result(
+        self,
+        result: vision.FaceLandmarkerResult,
+        output_image: mp.Image,
+        timestamp_ms: int,
+    ):
+        # Store result for main loop to access
+        self.results = result
+        return
 
     def process(self):
         success, image = self.cap.read()
@@ -255,7 +277,10 @@ class FaceTracker:
         cv2.imshow("tracking result", image)
         cv2.waitKey(1)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        self.results = self.face_mesh.process(image)
+        # self.results = self.face_mesh.process(image)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image)
+        frame_timestamp_ms = int(time.time() * 1000)
+        self.detector.detect_async(mp_image, frame_timestamp_ms)
         self.image = image
         return image
 
@@ -267,8 +292,8 @@ class FaceTracker:
         """
         results = self.results
         dx, dy = 0, 0
-        if results.multi_face_landmarks:
-            landmarks = results.multi_face_landmarks[0].landmark
+        if results.face_landmarks:
+            landmarks = results.face_landmarks[0]
 
             # --- 核心演算法：計算瞳孔在眼框中的相對位置 ---
             # 我們使用左眼來做基準 (MediaPipe 的左眼對應到畫面右邊的臉)
@@ -325,9 +350,9 @@ class FaceTracker:
             float: 原始 MAR 數值 (通常在 0.0 ~ 0.5 之間)
         """
         results = self.results
-        if results.multi_face_landmarks is None:
-            return
-        landmarks = results.multi_face_landmarks[0].landmark
+        if len(results.face_landmarks) == 0:
+            return 0
+        landmarks = results.face_landmarks[0]
         dx, dy = 0, 0
         # 1. 定義關鍵點索引 (Inner Lips)
         IDX_TOP = 13
@@ -381,8 +406,8 @@ class FaceTracker:
         left_ratio = 1.0
         right_ratio = 1.0
 
-        if results.multi_face_landmarks:
-            landmarks = results.multi_face_landmarks[0].landmark
+        if results.face_landmarks:
+            landmarks = results.face_landmarks[0]
 
             # --- 左眼關鍵點 (MediaPipe 的左眼對應畫面右側) ---
             # 垂直: 159 (上), 145 (下)
@@ -414,8 +439,8 @@ class FaceTracker:
         回傳: yaw, pitch, roll (單位: 度 degree)
         """
         results = self.results
-        if results.multi_face_landmarks:
-            face_landmarks = results.multi_face_landmarks[0]
+        if results.face_landmarks:
+            face_landmarks = results.face_landmarks[0]
         else:
             return (0, 0, 0)
         self.img_w = img_w
@@ -434,7 +459,7 @@ class FaceTracker:
         # 注意：MediaPipe 的點是正規化的 (0~1)，要乘上寬高
         # Index: Nose=1, Chin=152, L_Eye=33, R_Eye=263, L_Mouth=61, R_Mouth=291
         points = [
-            (face_landmarks.landmark[i].x * img_w, face_landmarks.landmark[i].y * img_h)
+            (face_landmarks[i].x * img_w, face_landmarks[i].y * img_h)
             for i in pose_landmark_index
         ]
 
@@ -523,7 +548,7 @@ class FaceTracker:
         # 3. 收集當前所有 landmarks 的 3D 座標
         # MediaPipe 提供的 z 座標是相對深度，我們需要把它變成類似像素的單位
         landmarks_3d_list = []
-        for lm in face_landmarks.landmark:
+        for lm in face_landmarks:
             # 將標準化座標轉換為近似的 3D 空間座標
             # x, y 乘上寬高，z 也乘上寬度作為深度比例估計
             lx, ly, lz = lm.x * img_w, lm.y * img_h, lm.z * img_w
@@ -597,8 +622,9 @@ class AsyncFaceTracker:
             img = self._tracker.process()
             height, width, channels = img.shape
             # 1. 取得數據 (這一步最耗時，現在不會卡住 UI 了)
+            if self._tracker.results is None:
+                continue
             yaw, pitch, roll = self._tracker.get_head_pose(width, height)
-
             bl, br = self._tracker.get_eye_blink_ratio()
             dx, dy = self._tracker.get_iris_pos()
             mo = self._tracker.calculate_mouth_openness(width, height)
