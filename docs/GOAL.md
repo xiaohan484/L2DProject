@@ -1,6 +1,4 @@
 # 📋 Python VTuber Engine - Project Handover Protocol
-【專案核心定義】
-
 
 ## level 3 開發路徑圖 (Roadmap)
 我們將這個階段拆解為四個里程碑：

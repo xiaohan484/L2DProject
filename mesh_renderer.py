@@ -1,0 +1,338 @@
+import arcade
+import arcade.gl
+import numpy as np
+from array import array
+import arcade
+import math
+
+
+class GridMesh:
+    def __init__(
+        self,
+        context: arcade.context,
+        texture_path: str,
+        grid_size=(100, 100),
+        scale=1.0,
+        parent=None,
+        data_key=None,
+    ):
+        self.ctx = context
+
+        # 1. 載入紋理
+        self.texture = self.ctx.load_texture(texture_path)
+        self.width = self.texture.width * scale
+        self.height = self.texture.height * scale
+
+        # 網格密度 (Cols, Rows)
+        self.cols, self.rows = grid_size
+
+        # 2. 定義 Shader (這是最基礎的 Pass-through Shader)
+        # 頂點著色器：負責計算點的位置 (之後變形就在這裡做手腳)
+        vertex_source = """
+        #version 330
+        
+        // 輸入屬性
+        in vec2 in_vert;
+        in vec2 in_uv;
+        
+        // 輸出給 Fragment Shader 的變數
+        out vec2 v_uv;
+        
+        // 全域變數 (Uniforms)
+        uniform vec2 u_pos;     // 網格整體位置
+        uniform mat4 u_proj;    // 投影矩陣 (把世界座標轉為螢幕座標)
+
+        void main() {
+            v_uv = in_uv;
+            // 計算最終位置: 原始頂點 + 整體位移
+            vec2 final_pos = in_vert + u_pos;
+            gl_Position = u_proj * vec4(final_pos, 0.0, 1.0);
+        }
+        """
+
+        # 片段著色器：負責填色
+        fragment_source = """
+        #version 330
+        
+        in vec2 v_uv;
+        out vec4 f_color;
+        
+        uniform sampler2D u_texture;
+
+        void main() {
+            // 從紋理取樣顏色
+            f_color = texture(u_texture, v_uv);
+        }
+        """
+
+        self.program = self.ctx.program(
+            vertex_shader=vertex_source,
+            fragment_shader=fragment_source,
+        )
+
+        # 3. 生成網格資料 (Vertices & Indices)
+        self.setup_mesh_data()
+
+        self.parent = parent
+        self.children = []
+        if parent:
+            parent.children.append(self)
+
+        # 儲存從 JSON 讀來的原始設定 (方便 Debug)
+        self.data_key = data_key
+
+        self.base_local_x = 0
+        self.base_local_y = 0
+
+        # 這些是 "相對" 於父物件的屬性 (Local Transform)
+        self.local_scale_x = 1.0
+        self.local_scale_y = 1.0
+        self.local_x = 0
+        self.local_y = 0
+        self.local_angle = 0
+        self.local_scale_y = 1.0
+
+        # 錨點 (0.0 ~ 1.0)，預設中心
+        self.anchor_x_ratio = 0.5
+        self.anchor_y_ratio = 0.5
+
+        self.center_x = 0
+        self.center_y = 0
+
+    def update_transform(self):
+        """核心：遞迴更新座標"""
+        if self.parent:
+            # 1. 取得父物件資訊
+            p_x, p_y = self.parent.center_x, self.parent.center_y
+            p_angle = self.parent.angle
+            p_scale = self.parent.scale
+
+            # 2. 計算旋轉 (父角度 + 本地角度)
+            # 這裡的數學確保了 "跟著爸爸轉"
+            rad = math.radians(p_angle)
+
+            # 旋轉公式
+            rot_x = self.local_x * math.cos(rad) - self.local_y * math.sin(rad)
+            rot_y = -(self.local_x * math.sin(rad) + self.local_y * math.cos(rad))
+
+            # 3. 更新自己的全域座標
+            self.center_x = p_x + rot_x * p_scale[0]
+            self.center_y = p_y + rot_y * p_scale[1]
+            self.angle = p_angle + self.local_angle
+            self.scale = p_scale
+
+            # 特別處理：眨眼縮放 (Y軸)
+            self.height = self.texture.height * self.scale[1] * self.local_scale_y
+
+            # TODO: 這裡尚未實作 "自身錨點旋轉" (Self-Pivot)，
+            # 目前旋轉是以 Sprite 中心為主。如果要讓頭部繞著脖子轉，
+            # 需要再加一段 offset math，但 MVP 先這樣即可。
+        else:
+            self.center_x = self.local_x
+            self.center_y = self.local_y
+
+        # 遞迴更新孩子
+        for child in self.children:
+            child.update_transform()
+
+    def setup_mesh_data(self):
+        """
+        生成 N x M 的網格頂點數據
+        Data Layout: [x, y, u, v, x, y, u, v, ...]
+        """
+        vertices = []
+        indices = []
+
+        # 步驟 A: 生成頂點 (Vertices)
+        # 我們把圖片中心設為 (0, 0)，方便之後旋轉
+        start_x = -self.width / 2
+        start_y = -self.height / 2
+        step_x = self.width / self.cols
+        step_y = self.height / self.rows
+
+        for r in range(self.rows + 1):
+            for c in range(self.cols + 1):
+                # 計算物理座標 (x, y)
+                px = start_x + (c * step_x)
+                py = start_y + (r * step_y)
+
+                # 計算紋理座標 (u, v) -> 範圍 0.0 ~ 1.0
+                u = c / self.cols
+                v = (
+                    r / self.rows
+                )  # 注意：有些 OpenGL 系統 v 是反的，若圖片倒置需改成 (1 - r/rows)
+
+                vertices.extend([px, py, u, v])
+
+        # 步驟 B: 生成索引 (Indices) - 定義三角形
+        # 每個格子 (Quad) 切成兩個三角形
+        for r in range(self.rows):
+            for c in range(self.cols):
+                # 計算當前格子的四個頂點索引
+                # i_tl = top-left, i_br = bottom-right
+                i_bl = r * (self.cols + 1) + c
+                i_br = i_bl + 1
+                i_tl = (r + 1) * (self.cols + 1) + c
+                i_tr = i_tl + 1
+
+                # 三角形 1: BL -> BR -> TL
+                indices.extend([i_bl, i_br, i_tl])
+                # 三角形 2: TL -> BR -> TR
+                indices.extend([i_tl, i_br, i_tr])
+
+        # 步驟 C: 打包進 GPU Buffer
+        # '2f 2f' 代表 2個 float (x,y) + 2個 float (u,v)
+        self.vbo = self.ctx.buffer(data=array("f", vertices))
+        self.ibo = self.ctx.buffer(data=array("I", indices))
+
+        self.original_vertices = np.array(vertices, dtype="f4")
+
+        # 這是我們要即時修改並傳給 GPU 的陣列
+        self.current_vertices = self.original_vertices.copy()
+        # 建立 VBO 時，要標記為 dynamic (雖然 arcade 預設通常沒差，但語意上比較正確)
+        self.vbo = self.ctx.buffer(data=array("f", self.current_vertices))
+
+        # 定義 Geometry 物件
+        self.geometry = self.ctx.geometry(
+            [arcade.gl.BufferDescription(self.vbo, "2f 2f", ["in_vert", "in_uv"])],
+            index_buffer=self.ibo,
+            mode=self.ctx.TRIANGLES,
+        )
+
+    def update_buffer(self):
+        """將 current_vertices 的內容寫入 GPU"""
+        # 注意：這是二進位寫入，速度很快
+        self.vbo.write(self.current_vertices.tobytes())
+
+    def apply_bend(self, bend_amount, time_offset=0.0):
+        """
+        對網格進行彎曲變形
+        bend_amount: 浮點數，負值向左彎，正值向右彎
+        """
+        # 1. 重置為原始形狀 (Reshape 成 N x 4，方便操作 X, Y)
+        # 每一列是 [x, y, u, v]
+        data = self.original_vertices.copy().reshape(-1, 4)
+
+        # 取得所有點的 Y 座標
+        ys = data[:, 1]
+
+        # 2. 計算權重 (Weight)
+        # 假設圖片中心是 (0,0)，上半部是頭髮根部，下半部是髮尾
+        # 我們要把 Y 座標正規化，讓根部不動 (weight=0)，髮尾動最多 (weight=1)
+
+        # 找出網格的頂部和底部邊界
+        top_y = ys.max()
+        bottom_y = ys.min()
+        height = top_y - bottom_y
+
+        if height == 0:
+            return
+
+        # 3. 計算每個點的權重與角度
+        # 根部 (top_y) weight = 0 (不動)
+        # 髮尾 (bottom_y) weight = 1 (轉最多)
+        current_y = data[:, 1]
+        normalized_y = weight = (top_y - current_y) / height
+        # 使用平方曲線讓彎曲更自然 (根部比較硬，髮尾比較軟)
+        weight = weight**2
+
+        # 計算旋轉角度 (弧度制)
+        # 負號是用來修正方向 (依據你的座標系可能需要調整)
+        base_theta = -bend_amount * weight
+        wave_theta = np.sin(normalized_y * 5.0 - time_offset * 2.0) * 0.01 * weight
+        theta = base_theta + wave_theta
+
+        cos_t = np.cos(theta)
+        sin_t = np.sin(theta)
+
+        # 4. 執行旋轉矩陣 (Rotation Matrix)
+        # 公式：
+        # x' = x * cos - y * sin
+        # y' = x * sin + y * cos
+        # 但我們必須繞著「根部」轉，所以要先移到相對座標，轉完再移回來
+
+        # 暫時將 Y 軸原點設為根部
+        rel_x = data[:, 0]  # 假設 X 中心原本就是 0
+        rel_y = data[:, 1] - top_y  # 讓根部變成 0
+
+        # 套用矩陣
+        new_x = rel_x * cos_t - rel_y * sin_t
+        new_y = rel_x * sin_t + rel_y * cos_t
+
+        # 移回世界座標
+        data[:, 0] = new_x + self.center_x
+        data[:, 1] = new_y + top_y + self.center_y  # 防呆
+
+        ## 正規化：Top = 0.0, Bottom = 1.0
+        ## (這裡假設 Y 向上為正，如果你的座標系 Y 向下為正，公式要反過來)
+        # normalized_y = (top_y - ys) / height
+
+        ## 3. 應用變形公式： x_offset = bend_amount * (y_ratio ^ 2)
+        ## 使用平方 (square) 會讓彎曲看起來更像拋物線，比較自然
+        # offsets = bend_amount * (normalized_y**2) * 100  # *100 是放大係數，讓效果明顯點
+
+        # 更新 X 座標
+        # data[:, 0] += offsets + self.center_x
+        # data[:, 1] += self.center_y
+
+        # 4. 存回 current_vertices 並上傳 GPU
+        self.current_vertices = data.flatten()
+        self.update_buffer()
+
+    def draw(self):
+        # 1. 【關鍵修正】開啟混合模式
+        # 這行指令告訴 GPU：計算像素時，要考慮 Alpha 通道
+        self.ctx.enable(self.ctx.BLEND)
+
+        # 2. 設定混合方程式 (通常 Arcade 預設就是這個，但為了保險起見可以明確指定)
+        # source (你的圖) * alpha + destination (背景) * (1 - alpha)
+        self.ctx.blend_func = self.ctx.BLEND_DEFAULT
+
+        # 3. 綁定資源與渲染
+        self.texture.use(0)
+        self.program["u_pos"] = (0, 0)
+        self.program["u_proj"] = self.ctx.projection_matrix
+        self.program["u_texture"] = 0
+
+        self.geometry.render(self.program)
+
+
+test_path = "assets/sample_model/processed/HairFront.png"
+
+
+class MyWindow(arcade.Window):
+    def __init__(self):
+        super().__init__(800, 600, "Level 3: Mesh Test")
+        arcade.set_background_color(arcade.color.GREEN)
+
+        # 這裡不使用 arcade.SpriteList，因為我們是自繪幾何
+        # 初始化 GridMesh (建議把 front_hair 路徑換上去)
+        self.hair_mesh = GridMesh(
+            self.ctx, test_path, grid_size=(10, 10), scale=1.0  # 10x10 的格子
+        )
+
+        self.hair_mesh.x = 400
+        self.hair_mesh.y = 300
+        # ... (初始化代碼) ...
+        self.total_time = 0.0
+
+    def on_draw(self):
+        self.clear()
+        # 直接呼叫我們寫的 draw
+        self.hair_mesh.draw()
+
+    def on_update(self, delta_time):
+        self.total_time += delta_time
+
+        # 產生一個來回擺動的數值 (-1.0 ~ 1.0)
+        bend_value = np.sin(self.total_time * 3.0)
+        x = 100 * np.sin(self.total_time * 2.0)
+        y = 100 * np.sin(self.total_time * 3.0)
+
+        # 呼叫我們剛寫的彎曲函式
+        self.hair_mesh.apply_bend(bend_value)
+
+
+if __name__ == "__main__":
+    window = MyWindow()
+    arcade.run()
