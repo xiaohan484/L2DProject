@@ -134,9 +134,7 @@ class MyGame(arcade.Window):
         name: 對應 JSON 裡的 key (例如 'face', 'eye_lash_L')
         parent: 父物件 Sprite
         """
-        if name not in MODEL_DATA:
-            print(f"⚠️ 警告: JSON 裡找不到 '{name}'")
-            return arcade.Sprite()  # 回傳空物件避免當機
+        assert name in MODEL_DATA, f"⚠️ 警告: JSON 裡找不到 '{name}'"
 
         data = MODEL_DATA[name]
         filepath = os.path.join("assets/sample_model/processed", data["filename"])
@@ -207,7 +205,6 @@ class MyGame(arcade.Window):
         # 假設你的 JSON 裡臉部叫做 "face" (如果不一樣請修改 key)
         # body
         self.body = self.create_vt_sprite("Body", append=False)
-        self.back_hair = self.create_vt_sprite("BackHair", parent=self.body)
         self.back_hair_mesh = self.create_mesh("BackHair", parent=self.body)
 
         self.all_sprites.append(self.body)
@@ -240,14 +237,18 @@ class MyGame(arcade.Window):
         self.mouth = self.create_vt_sprite("Mouth", parent=self.face)
 
         # 前髮 (最上層)
-        self.hair_front_shadow = self.create_vt_sprite(
-            "FrontHairShadow", parent=self.face
+        self.hair_front_left_shadow_mesh = self.create_mesh(
+            "FrontHairShadowLeft", parent=self.face
         )
-        self.hair_front_shadow_mesh = self.create_mesh(
-            "FrontHairShadow", parent=self.face
+        self.hair_front_middle_shadow_mesh = self.create_mesh(
+            "FrontHairShadowMiddle", parent=self.face
         )
-        self.hair_front = self.create_vt_sprite("HairFront", parent=self.face)
-        self.hair_mesh = self.create_mesh("HairFront", parent=self.face)
+        self.hair_front_right_shadow_mesh = self.create_mesh(
+            "FrontHairShadowRight", parent=self.face
+        )
+        self.hair_left_mesh = self.create_mesh("FrontHairLeft", parent=self.face)
+        self.hair_right_mesh = self.create_mesh("FrontHairRight", parent=self.face)
+        self.hair_middle_mesh = self.create_mesh("FrontHairMiddle", parent=self.face)
 
         self.eye_lid_L.set_depend(
             children={
@@ -275,20 +276,32 @@ class MyGame(arcade.Window):
                 self.eye_lash_R,
                 self.eye_brow_L,
                 self.eye_brow_R,
-                self.hair_front,
-                self.hair_mesh,
+                self.hair_left_mesh,
+                self.hair_middle_mesh,
+                self.hair_right_mesh,
             ],
-            "FrontShadow": [self.hair_front_shadow, self.hair_front_shadow_mesh],
+            "FrontShadow": [
+                self.hair_front_left_shadow_mesh,
+                self.hair_front_right_shadow_mesh,
+                self.hair_front_middle_shadow_mesh,
+            ],
             "FaceBase": [self.face],
-            "BackHair": [self.back_hair, self.back_hair_mesh],
+            "BackHair": [self.back_hair_mesh],
         }
 
     def on_draw(self):
         self.clear()
-        self.back_hair_mesh.draw()
-        self.all_sprites.draw()
-        self.hair_front_shadow_mesh.draw()
-        self.hair_mesh.draw()
+        for object in [
+            self.back_hair_mesh,
+            self.all_sprites,
+            self.hair_front_middle_shadow_mesh,
+            self.hair_front_left_shadow_mesh,
+            self.hair_front_right_shadow_mesh,
+            self.hair_middle_mesh,
+            self.hair_left_mesh,
+            self.hair_right_mesh,
+        ]:
+            object.draw()
 
     # def on_key_release(self, key, modifiers):
     # implement calibration
@@ -365,18 +378,17 @@ class MyGame(arcade.Window):
         force = -yaw_velocity * 0.01
         bend_val = self.hair_physics.update(force)
         # 4. 驅動網格
-        self.hair_mesh.apply_bend(bend_val, self.total_time)
-        self.hair_front_shadow_mesh.apply_bend(bend_val, self.total_time)
-        self.back_hair_mesh.apply_bend(-bend_val * 0.2, self.total_time)
+        for front_hair in [
+            self.hair_left_mesh,
+            self.hair_middle_mesh,
+            self.hair_right_mesh,
+            self.hair_front_left_shadow_mesh,
+            self.hair_front_middle_shadow_mesh,
+            self.hair_front_right_shadow_mesh,
+        ]:
+            front_hair.apply_bend(bend_val, self.total_time)
 
-        self.hair_front.local_scale_x = 0
-        self.hair_front.local_scale_y = 0
-        self.hair_front_shadow.local_scale_x = 0
-        self.hair_front_shadow.local_scale_y = 0
-        self.back_hair.local_scale_x = 0
-        self.back_hair.local_scale_y = 0
-        # self.hair_front_shadow.local_scale_x = 0
-        # self.hair_front_shadow.local_scale_y = 0
+        self.back_hair_mesh.apply_bend(-bend_val * 0.2, self.total_time)
 
     def on_update(self, delta_time):
         with self.lock:

@@ -196,5 +196,59 @@
     "global_center_y": 394,
     "anchor_x": 0.5,
     "anchor_y": 0.5
+  },
+  "FrontHairLeft": {
+    "filename": "FrontHairLeft.png",
+    "original_width": 77,
+    "original_height": 419,
+    "global_center_x": 544,
+    "global_center_y": 401,
+    "anchor_x": 0.5,
+    "anchor_y": 0.5
+  },
+  "FrontHairMiddle": {
+    "filename": "FrontHairMiddle.png",
+    "original_width": 225,
+    "original_height": 178,
+    "global_center_x": 623,
+    "global_center_y": 263,
+    "anchor_x": 0.5,
+    "anchor_y": 0.5
+  },
+  "FrontHairRight": {
+    "filename": "FrontHairRight.png",
+    "original_width": 70,
+    "original_height": 425,
+    "global_center_x": 708,
+    "global_center_y": 396,
+    "anchor_x": 0.5,
+    "anchor_y": 0.5
+  },
+  "FrontHairShadowLeft": {
+    "filename": "FrontHairShadowLeft.png",
+    "original_width": 71,
+    "original_height": 429,
+    "global_center_x": 545,
+    "global_center_y": 399,
+    "anchor_x": 0.5,
+    "anchor_y": 0.5
+  },
+  "FrontHairShadowMiddle": {
+    "filename": "FrontHairShadowMiddle.png",
+    "original_width": 164,
+    "original_height": 179,
+    "global_center_x": 626,
+    "global_center_y": 264,
+    "anchor_x": 0.5,
+    "anchor_y": 0.5
+  },
+  "FrontHairShadowRight": {
+    "filename": "FrontHairShadowRight.png",
+    "original_width": 69,
+    "original_height": 420,
+    "global_center_x": 703,
+    "global_center_y": 402,
+    "anchor_x": 0.5,
+    "anchor_y": 0.5
   }
 }

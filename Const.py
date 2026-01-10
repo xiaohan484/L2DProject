@@ -3,6 +3,7 @@ import json
 # --- 設定區 ---
 # 請設為你原本 Krita 畫布的高度 (這很重要！用來做 Y 軸翻轉)
 # 如果你的原圖是 1216x2236，這裡就填 2236
+MODEL_PATH = "assets/sample_model/processed/"
 CANVAS_HEIGHT = 2236
 GLOBAL_SCALE = 1.5
 
