@@ -104,9 +104,9 @@ class MouthSprite(VTSprite):
         """
         openness = face_info["MouthOpenness"]
         # Simple threshold logic (Logic Step 2)
-        if openness < 0.2:
+        if openness < 0.1:
             new_state = "closed"
-        elif openness < 0.6:
+        elif openness < 0.3:
             new_state = "half"
         else:
             new_state = "open"
@@ -124,7 +124,8 @@ class PupilsSprite(VTSprite):
         self.filter_eye_y = OneEuroFilter(min_cutoff=0.5, beta=0.5)
         self.last_valid_eye_x = 0.0
         self.last_valid_eye_y = 0.0
-        self.calibration = (-0.5867841357630763, -0.5041574138173885)
+        # self.calibration = (-0.5867841357630763, -0.5041574138173885)
+        self.calibration = (0, 0)
         self.x = 0
         self.y = 0
 
@@ -150,23 +151,12 @@ class PupilsSprite(VTSprite):
             dx = self.last_valid_eye_x
             dy = self.last_valid_eye_y
         else:
-            current_time = time.time()
-            dx = self.filter_eye_x(current_time, dx)
-            dy = self.filter_eye_y(current_time, dy)
             self.last_valid_eye_x = dx
             self.last_valid_eye_y = dy
 
         raw_x = dx * MAX_W
         raw_y = dy * MAX_H
-        norm_dist = (raw_x / MAX_W) ** 2 + (raw_y / MAX_H) ** 2
-        if norm_dist > 1:
-            scale = 1 / math.sqrt(norm_dist)
-            final_x = raw_x * scale
-            final_y = raw_y * scale
-        else:
-            final_x = raw_x
-            final_y = raw_y
-        return final_x, final_y
+        return raw_x, raw_y
 
 
 class LidSprite(VTSprite):
@@ -193,7 +183,7 @@ class LidSprite(VTSprite):
         else:
             blink = blinkR
         current_time = time.time()
-        blink = self.filter_blink(current_time, blinkL)
+        # blink = self.filter_blink(current_time, blinkL)
 
         # update local
         target_y = map_range(blink, EAR_MIN, EAR_MAX, EYE_CLOSED_Y, EYE_OPEN_Y)

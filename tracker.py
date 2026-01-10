@@ -69,137 +69,31 @@ def load_personal_model(json_path):
 my_face = load_personal_model("assets/privacy/my_personal_landmarks.json")
 
 
-def project_perspective_auto_fit(
-    points_3d, win_w, win_h, fov_degrees=60.0, padding=0.1
+def convert_blendshape_dict(raw_shape):
+    # 【關鍵步驟】用 Comprehension 轉成字典 { 'jawOpen': 0.9, 'eyeBlink_L': 0.0 ... }
+    blendshape_dict = {shape.category_name: shape.score for shape in raw_shape}
+    return blendshape_dict
+
+
+import cv2
+import numpy as np
+
+
+def get_reprojection_error(
+    model_points, image_points, rvec, tvec, camera_matrix, dist_coeffs
 ):
     """
-    透視投影 + 自動縮放 (Auto-Dolly)
-
-    1. 將 3D 點雲移到原點 (0,0,0)
-    2. 根據 FOV 計算虛擬焦距
-    3. 計算需要將物體推遠多少距離 (tz)，才能剛好填滿視窗
-    4. 執行透視投影: u = fx * (x / z) + cx
-
-    Args:
-        points_3d (np.array): (N, 3) 3D 點
-        win_w, win_h (int): 視窗大小
-        fov_degrees (float): 虛擬相機的視野角度 (預設 60 度，接近人眼/Webcam)
-        padding (float): 邊緣留白比例 (0.1 = 10%)
-
-    Returns:
-        np.array: (N, 2) 整數座標 (u, v)
+    計算 MediaPipe 地標的重投影誤差，用於偵測遮擋導致的幾何畸變。
+    (Comment: Calculate the reprojection error to detect facial distortion.)
     """
-    # 1. 複製資料以免改到原始數據
-    p3d = points_3d.copy()
+    projected_points, _ = cv2.projectPoints(
+        model_points, rvec, tvec, camera_matrix, dist_coeffs
+    )
+    projected_points = projected_points.reshape(-1, 2)
+    # 計算平均每個點的像素距離差
+    error = np.mean(np.linalg.norm(image_points - projected_points, axis=1))
 
-    # 2. 幾何中心歸零 (Centering)
-    # 找出物體中心，並將所有點移到以 (0,0,0) 為中心
-    center = np.mean(p3d, axis=0)
-    p3d_centered = p3d - center
-
-    # 3. 計算 3D 空間中的包圍盒尺寸 (Bounding Box Size)
-    min_xyz = np.min(p3d_centered, axis=0)
-    max_xyz = np.max(p3d_centered, axis=0)
-    face_w_3d = max_xyz[0] - min_xyz[0]
-    face_h_3d = max_xyz[1] - min_xyz[1]
-
-    # 4. 建立虛擬相機參數 (Intrinsics)
-    # fx = (W / 2) / tan(fov / 2)
-    fov_rad = np.radians(fov_degrees)
-    focal_length = (win_w / 2) / np.tan(fov_rad / 2)
-
-    cx = win_w / 2
-    cy = win_h / 2
-
-    # 5. 計算「推軌距離」 (Dolly Distance / Z-Offset)
-    # 我們需要多深的 Z，才能讓投影後的寬度等於視窗寬度？
-    # 公式導出: projected_size = focal_length * (real_size / depth)
-    # 所以: depth = focal_length * real_size / projected_size
-
-    target_w = win_w * (1.0 - padding * 2)
-    target_h = win_h * (1.0 - padding * 2)
-
-    # 避免除以零
-    face_w_3d = max(face_w_3d, 1e-5)
-    face_h_3d = max(face_h_3d, 1e-5)
-
-    dist_w = focal_length * (face_w_3d / target_w)
-    dist_h = focal_length * (face_h_3d / target_h)
-
-    # 取最遠的距離，確保寬和高都塞得進去
-    z_offset = max(dist_w, dist_h)
-
-    # 稍微加一點近平面剪裁保護 (Near Plane Clipping protection)
-    # 讓臉的最凸點不會戳到鏡頭後面
-    max_z_variation = np.max(np.abs(p3d_centered[:, 2]))
-    z_dist = z_offset + max_z_variation + 10  # 安全距離
-
-    # 6. 執行透視投影 (Perspective Projection)
-    # u = fx * x / z + cx
-    # v = fy * y / z + cy
-
-    # 加上深度推移
-    z_coords = p3d_centered[:, 2] + z_dist
-
-    # 投影運算
-    # 注意: 如果你的 Y 軸方向跟螢幕相反，可以在這裡加負號 (-p3d_centered[:, 1])
-    # 這裡假設 Y 向下為正 (OpenCV 標準)
-    u = (focal_length * p3d_centered[:, 0] / z_coords) + cx
-    v = (focal_length * p3d_centered[:, 1] / z_coords) + cy
-
-    return np.stack((u, v), axis=1).astype(np.int32)
-
-
-def fit_points_to_window(uv_points, window_w, window_h, padding_ratio=0.1):
-    """
-    接收任意一組 UV 點 (N, 2)，自動縮放平移以填滿視窗。
-
-    Args:
-        uv_points (np.array): 形狀 (N, 2) 的點，單位不限 (可以是 0~1 或任意 pixel)
-        window_w (int): 目標視窗寬度
-        window_h (int): 目標視窗高度
-        padding_ratio (float): 邊緣留白比例 (例如 0.1 代表留 10% 空隙)
-
-    Returns:
-        np.array: 轉換後的 (N, 2) 整數座標，可直接畫圖
-    """
-    points = np.array(uv_points)
-
-    # 1. 找出目前的邊界 (Bounding Box)
-    min_x, min_y = np.min(points, axis=0)
-    max_x, max_y = np.max(points, axis=0)
-
-    current_w = max_x - min_x
-    current_h = max_y - min_y
-    current_center_x = (min_x + max_x) / 2
-    current_center_y = (min_y + max_y) / 2
-
-    # 2. 避免除以零 (如果只有一個點或點重疊)
-    current_w = max(current_w, 1e-5)
-    current_h = max(current_h, 1e-5)
-
-    # 3. 計算縮放比例 (Scale to Fit)
-    # 我們希望寬度能撐滿視窗，高度也能撐滿視窗
-    # 但為了不變形，我們取 "兩者中較小" 的縮放倍率
-    scale_x = window_w / current_w
-    scale_y = window_h / current_h
-
-    # 實際縮放倍率 (乘上 (1 - padding*2) 是為了留出雙邊的白邊)
-    final_scale = min(scale_x, scale_y) * (1.0 - padding_ratio * 2)
-
-    # 4. 執行變換公式
-    # New = (Old - Old_Center) * Scale + New_Window_Center
-
-    target_center_x = window_w // 2
-    target_center_y = window_h // 2
-
-    new_xs = (points[:, 0] - current_center_x) * final_scale + target_center_x
-    new_ys = (points[:, 1] - current_center_y) * final_scale + target_center_y
-
-    # 5. 組合並轉整數
-    new_points = np.stack((new_xs, new_ys), axis=1).astype(np.int32)
-
-    return new_points
+    return error
 
 
 class FaceTracker:
@@ -212,6 +106,8 @@ class FaceTracker:
         options = vision.FaceLandmarkerOptions(
             base_options=base_options,
             running_mode=mp.tasks.vision.RunningMode.LIVE_STREAM,
+            min_face_presence_confidence=0.8,
+            min_tracking_confidence=0.7,
             output_face_blendshapes=True,
             output_facial_transformation_matrixes=False,
             num_faces=1,
@@ -236,30 +132,14 @@ class FaceTracker:
             (my_face[i][0], my_face[i][1], my_face[i][2]) for i in pose_landmark_index
         ]
         self.model_points = np.array(points, dtype=np.float64)
-        # self.model_points = np.array([
-        #    (0.0, 0.0, 0.0),             # Nose tip (原點)
-        #    (0.0, 330.0, 65.0),          # Chin (下巴在下面 -> Y是正的)
-        #    (-225.0, -170.0, 135.0),     # Left eye left corner (眼睛在上面 -> Y是負的)
-        #    (225.0, -170.0, 135.0),      # Right eye right corner
-        #    (-150.0, 150.0, 125.0),      # Left Mouth corner (嘴巴在下面 -> Y是正的)
-        #    (150.0, 150.0, 125.0),        # Right Mouth corner
-
-        #    ## --- [新增] 穩定錨點 ---
-        #    #(-60.0, -170.0, 100.0),      # 7. Left Eye Inner Corner (內眼角) - 靠鼻樑
-        #    #(60.0, -170.0, 100.0),       # 8. Right Eye Inner Corner (內眼角) - 靠鼻樑
-
-        #    ## --- [修正] 9, 10 眉峰/額頭 (位置較高，且稍微深一點) ---
-        #    ## Y 設為 300.0 (比眼睛 170 高)
-        #    ## X 設為 180.0 (寬度適中)
-        #    #(-180.0, -300.0, 100.0),     # 9. 左眉峰 (對應 105)
-        #    #(180.0, -300.0, 100.0)       # 10. 右眉峰 (對應 334)
-        # ], dtype=np.float64)
 
         # 相機矩陣 (之後在 process 裡初始化一次即可)
         self.cam_matrix = None
         self.dist_coeffs = np.zeros((4, 1))  # 假設無鏡頭變形.VideoCapture(0)
         self.first = True
         self.results = None
+        self.last_angle = (0, 0, 0)
+        self.blendshapes = None
 
     def store_result(
         self,
@@ -269,6 +149,8 @@ class FaceTracker:
     ):
         # Store result for main loop to access
         self.results = result
+        if len(self.results.face_blendshapes) > 0:
+            self.blendshapes = convert_blendshape_dict(self.results.face_blendshapes[0])
         return
 
     def process(self):
@@ -290,54 +172,14 @@ class FaceTracker:
         x: -1.0 (左) ~ 1.0 (右), 0.0 是中間
         y: -1.0 (上) ~ 1.0 (下), 0.0 是中間
         """
-        results = self.results
-        dx, dy = 0, 0
-        if results.face_landmarks:
-            landmarks = results.face_landmarks[0]
+        if self.blendshapes is None:
+            return
 
-            # --- 核心演算法：計算瞳孔在眼框中的相對位置 ---
-            # 我們使用左眼來做基準 (MediaPipe 的左眼對應到畫面右邊的臉)
-            # 索引: 33(眼頭), 133(眼尾), 468(瞳孔中心)
+        dx = self.blendshapes["eyeLookOutLeft"] - self.blendshapes["eyeLookInLeft"]
+        dy = self.blendshapes["eyeLookUpLeft"] - self.blendshapes["eyeLookDownLeft"]
+        return -dx, -dy * 1.2
 
-            # 取得座標 (只要 x, y)
-            in_x, in_y = landmarks[33].x, landmarks[33].y  # Inner Corner
-            out_x, out_y = landmarks[133].x, landmarks[133].y  # Outer Corner
-            iris_x, iris_y = landmarks[468].x, landmarks[468].y  # Iris Center
-
-            # 1. 計算眼寬和眼高 (大略估算)
-            eye_width = out_x - in_x
-            # 為了簡化，高度我們先用眼寬的一個比例來抓，或者暫時忽略 Y 軸精確度
-
-            # 2. 計算瞳孔相對於眼頭的距離
-            dist_x = iris_x - in_x
-
-            # 3. 算出比例 (0.0 ~ 1.0)
-            # 0.5 代表在中間。一般來說瞳孔不會碰到眼角，所以範圍大概在 0.3~0.7 之間
-            ratio_x = dist_x / eye_width
-
-            # 4. 正規化到 -1 ~ 1 (為了給 Pygame 用)
-            # 我們假設 0.5 是中心點。
-            # (ratio - 0.5) * 2 -> 變成 -1 ~ 1
-            # 乘上一個敏感度係數 (Sensitivity)，讓眼睛動得更靈敏
-            SENSITIVITY = 2.5
-            dx = (ratio_x - 0.45) * 2 * SENSITIVITY  # 0.45 是稍微修正中心偏移
-
-            # Y 軸簡單處理 (眼球上下)
-            # 使用眼皮上下點：159 (上), 145 (下)
-            top_y = landmarks[159].y
-            bot_y = landmarks[145].y
-            eye_height = bot_y - top_y
-            dist_y = iris_y - top_y
-            ratio_y = dist_y / eye_height
-            dy = (ratio_y - 0.45) * 2 * SENSITIVITY
-
-            # 限制數值在 -1 ~ 1 之間 (Clamping)
-            dx = -max(-1.0, min(1.0, dx))
-            dy = -max(-1.0, min(1.0, dy))
-
-        return dx, dy
-
-    def calculate_mouth_openness(self, image_width, image_height):
+    def calculate_mouth_openness(self):
         """
         計算嘴巴張開比例 (MAR - Mouth Aspect Ratio)
 
@@ -349,52 +191,11 @@ class FaceTracker:
         Returns:
             float: 原始 MAR 數值 (通常在 0.0 ~ 0.5 之間)
         """
-        results = self.results
-        if len(results.face_landmarks) == 0:
+        if self.blendshapes is None:
             return 0
-        landmarks = results.face_landmarks[0]
-        dx, dy = 0, 0
-        # 1. 定義關鍵點索引 (Inner Lips)
-        IDX_TOP = 13
-        IDX_BOTTOM = 14
-        IDX_LEFT = 61
-        IDX_RIGHT = 291
-        # 2. 取得座標點 (將 Normalized 0~1 轉為 Pixel 座標)
-        # 注意：如果不轉 Pixel 直接用 Normalized 算也可以，但轉 Pixel 比較直觀好除錯
-        p_top = np.array(
-            [landmarks[IDX_TOP].x * image_width, landmarks[IDX_TOP].y * image_height]
-        )
-        p_bottom = np.array(
-            [
-                landmarks[IDX_BOTTOM].x * image_width,
-                landmarks[IDX_BOTTOM].y * image_height,
-            ]
-        )
-        p_left = np.array(
-            [landmarks[IDX_LEFT].x * image_width, landmarks[IDX_LEFT].y * image_height]
-        )
-        p_right = np.array(
-            [
-                landmarks[IDX_RIGHT].x * image_width,
-                landmarks[IDX_RIGHT].y * image_height,
-            ]
-        )
-
-        # 3. 計算歐幾里得距離 (Euclidean Distance)
-        # 垂直距離 (開合程度)
-        height = np.linalg.norm(p_top - p_bottom)
-
-        # 水平距離 (嘴巴寬度 - 作為分母)
-        width = np.linalg.norm(p_left - p_right)
-
-        # 4. 防呆機制 (避免除以零)
-        if width < 1e-6:
-            return 0.0
-
-        # 5. 計算比例
-        mar = height / width
-        mar = map_range(mar, 0, 0.5, 0, 1)
-        return mar
+        jawOpen = self.blendshapes["jawOpen"]
+        jawOpen = map_range(jawOpen, 0, 0.3, 0, 1)
+        return jawOpen
 
     def get_eye_blink_ratio(self):
         """
@@ -402,36 +203,12 @@ class FaceTracker:
         回傳: (left_ratio, right_ratio)
         數值通常在 0.0 (閉) ~ 0.3 (大開) 之間
         """
-        results = self.results
-        left_ratio = 1.0
-        right_ratio = 1.0
-
-        if results.face_landmarks:
-            landmarks = results.face_landmarks[0]
-
-            # --- 左眼關鍵點 (MediaPipe 的左眼對應畫面右側) ---
-            # 垂直: 159 (上), 145 (下)
-            # 水平: 33 (內), 133 (外)
-            l_top = landmarks[159].y
-            l_bot = landmarks[145].y
-            l_in = landmarks[33].x
-            l_out = landmarks[133].x
-
-            # 計算垂直距離 / 水平距離 (標準化，避免離鏡頭遠近影響數值)
-            # 加上一個極小的數 1e-6 避免除以零
-            left_ratio = abs(l_bot - l_top) / (abs(l_out - l_in) + 1e-6)
-
-            # --- 右眼關鍵點 ---
-            # 垂直: 386 (上), 374 (下)
-            # 水平: 362 (內), 263 (外)
-            r_top = landmarks[386].y
-            r_bot = landmarks[374].y
-            r_in = landmarks[362].x
-            r_out = landmarks[263].x
-
-            right_ratio = abs(r_bot - r_top) / (abs(r_out - r_in) + 1e-6)
-
-        return left_ratio, right_ratio
+        if self.blendshapes is None:
+            return
+        return (
+            1 - self.blendshapes["eyeBlinkLeft"],
+            1 - self.blendshapes["eyeBlinkRight"],
+        )
 
     def get_head_pose(self, img_w, img_h):
         """
@@ -463,19 +240,6 @@ class FaceTracker:
             for i in pose_landmark_index
         ]
 
-        # [
-        #    (face_landmarks.landmark[1].x * img_w, face_landmarks.landmark[1].y * img_h),     # Nose tip
-        #    (face_landmarks.landmark[152].x * img_w, face_landmarks.landmark[152].y * img_h), # Chin
-        #    (face_landmarks.landmark[33].x * img_w, face_landmarks.landmark[33].y * img_h),   # Left Eye
-        #    (face_landmarks.landmark[263].x * img_w, face_landmarks.landmark[263].y * img_h), # Right Eye
-        #    (face_landmarks.landmark[61].x * img_w, face_landmarks.landmark[61].y * img_h),   # Left Mouth
-        #    (face_landmarks.landmark[291].x * img_w, face_landmarks.landmark[291].y * img_h),  # Right Mouth
-        #    # --- [新增] ---
-        #    #(face_landmarks.landmark[362].x * img_w, face_landmarks.landmark[362].y * img_h), # 7. 左內眼角
-        #    #(face_landmarks.landmark[133].x * img_w, face_landmarks.landmark[133].y * img_h), # 8. 右內眼角
-        #    #(face_landmarks.landmark[105].x * img_w, face_landmarks.landmark[105].y * img_h),  # 9. 左眉尾 (這點相對穩定)
-        #    #(face_landmarks.landmark[334].x * img_w, face_landmarks.landmark[334].y * img_h)  # 10. 右眉尾
-        #    ]
         image_points = np.array(points, dtype="double")
 
         # 2. 呼叫 SolvePnP
@@ -508,12 +272,8 @@ class FaceTracker:
         pitch -= ipitch
         yaw -= iyaw
         roll -= iroll
+        self.last_angle = yaw, pitch, roll
 
-        # pitch = max(-90, min(90, pitch))
-        # yaw   = max(-90, min(90, yaw))
-        # roll  = max(-90, min(90, roll))
-        # 這裡的數值通常很敏感，可能需要限制範圍 (Clamp)
-        # 顯示視窗
         debug = True
         if debug:
             debug_board = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -627,7 +387,7 @@ class AsyncFaceTracker:
             yaw, pitch, roll = self._tracker.get_head_pose(width, height)
             bl, br = self._tracker.get_eye_blink_ratio()
             dx, dy = self._tracker.get_iris_pos()
-            mo = self._tracker.calculate_mouth_openness(width, height)
+            mo = self._tracker.calculate_mouth_openness()
 
             pub.sendMessage(
                 "FaceInfo",
