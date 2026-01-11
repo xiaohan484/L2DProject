@@ -1,4 +1,33 @@
 import numpy as np
+import json
+
+
+def load_bones(filepath):
+    """從 JSON 讀取骨骼並重建父子關係"""
+    with open(filepath, "r") as f:
+        data = json.load(f)
+
+    bones = []
+    bone_map = {}  # name -> Bone Object
+
+    # 第一輪：建立物件
+    parent_x = 0
+    parent_y = 0
+    for b_data in data:
+        bone = Bone(b_data["name"], b_data["x"], b_data["y"])
+        bones.append(bone)
+        bone_map[bone.name] = bone
+
+    # 第二輪：建立連結
+    for b_data in data:
+        if b_data["parent"]:
+            child = bone_map[b_data["name"]]
+            parent = bone_map[b_data["parent"]]
+            child.parent = parent
+            parent.children.append(child)
+    for b in bones:
+        b.update()
+    return bones
 
 
 class Bone:

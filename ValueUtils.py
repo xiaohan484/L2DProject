@@ -40,3 +40,46 @@ class SpringDamper:
         self.position += self.velocity
 
         return self.position
+
+    import math
+
+
+class PendulumPhysics:
+    def __init__(self, stiffness=0.05, damping=0.5, mass=1.0, gravity_power=0.5):
+        self.stiffness = stiffness  # 恢復力 (彈簧硬度)
+        self.damping = damping  # 阻尼 (消耗能量)
+        self.mass = mass  # 質量 (慣性)
+        self.gravity_power = gravity_power  # 重力影響係數 (0=無重力, 1=完全垂下)
+
+        # 狀態變數
+        self.current_angle = 0.0
+        self.velocity = 0.0
+
+    def update(self, target_angle_offset, input_force, delta_time=1 / 60):
+        """
+        :param target_angle_offset: 想要回復到的角度 (通常包含重力修正)
+        :param input_force: 外力 (頭部移動產生的甩動力)
+        """
+
+        # 1. 彈力 (Hooke's Law): 想要回到目標角度
+        # force = -k * displacement
+        displacement = self.current_angle - target_angle_offset
+        restoring_force = -self.stiffness * displacement
+
+        # 2. 總力合成
+        # Force = 彈力 + 外力 (甩動)
+        total_force = restoring_force + input_force
+
+        # 3. 牛頓第二定律 (F = ma -> a = F/m)
+        acceleration = total_force / self.mass
+
+        # 4. 積分計算 (Euler Integration)
+        self.velocity += acceleration
+
+        # 5. 阻尼與空氣阻力 (讓速度慢下來)
+        self.velocity *= 1.0 - self.damping
+
+        # 6. 更新角度
+        self.current_angle += self.velocity
+
+        return self.current_angle

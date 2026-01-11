@@ -7,7 +7,8 @@ from VTSprite import *
 import arcade
 from tracker import AsyncFaceTracker
 from ValueUtils import *
-from mesh_renderer import GridMesh
+from mesh_renderer import GridMesh, SkinnedMesh
+from bone_system import load_bones
 import time
 
 
@@ -26,6 +27,9 @@ class MyGame(arcade.Window):
         pub.subscribe(self.notify_face_info, "FaceInfo")
 
         self.hair_physics = SpringDamper(stiffness=0.01, damping=0.6)
+        self.hair_physics_pendulum = PendulumPhysics(
+            stiffness=0.01, damping=0.6, mass=1.0, gravity_power=1.0
+        )
         self.last_yaw = 0
         self.total_time = 0
 
@@ -128,7 +132,7 @@ class MyGame(arcade.Window):
 
         return sprite
 
-    def create_mesh(self, name, parent=None, append=True) -> VTSprite:
+    def create_mesh(self, name, parent=None, append=True, skin_mesh=False) -> VTSprite:
         """
         【工廠函數】讀取 JSON 並自動組裝 Sprite
         name: 對應 JSON 裡的 key (例如 'face', 'eye_lash_L')
@@ -139,14 +143,28 @@ class MyGame(arcade.Window):
         data = MODEL_DATA[name]
         filepath = os.path.join("assets/sample_model/processed", data["filename"])
         # 1. 建立 Sprite
-        mesh = GridMesh(
-            self.ctx,
-            filepath,
-            grid_size=(10, 10),
-            scale=GLOBAL_SCALE,
-            parent=parent,
-            data_key=data,  # 10x10 的格子
-        )
+        if skin_mesh:
+            self.hair_bones = load_bones(
+                "assets/sample_model/processed/FrontHairLeft.json"
+            )
+            mesh = SkinnedMesh(
+                self.ctx,
+                filepath,
+                grid_size=(10, 10),
+                scale=GLOBAL_SCALE,
+                parent=parent,
+                data_key=data,  # 10x10 的格子
+                bones=self.hair_bones,
+            )
+        else:
+            mesh = GridMesh(
+                self.ctx,
+                filepath,
+                grid_size=(10, 10),
+                scale=GLOBAL_SCALE,
+                parent=parent,
+                data_key=data,  # 10x10 的格子
+            )
 
         # 2. 讀取錨點設定
         mesh.anchor_x_ratio = data.get("anchor_x", 0.5)
@@ -246,7 +264,9 @@ class MyGame(arcade.Window):
         self.hair_front_right_shadow_mesh = self.create_mesh(
             "FrontHairShadowRight", parent=self.face
         )
-        self.hair_left_mesh = self.create_mesh("FrontHairLeft", parent=self.face)
+        self.hair_left_mesh = self.create_mesh(
+            "FrontHairLeft", parent=self.face, skin_mesh=True
+        )
         self.hair_right_mesh = self.create_mesh("FrontHairRight", parent=self.face)
         self.hair_middle_mesh = self.create_mesh("FrontHairMiddle", parent=self.face)
 
@@ -379,7 +399,6 @@ class MyGame(arcade.Window):
         bend_val = self.hair_physics.update(force)
         # 4. 驅動網格
         for front_hair in [
-            self.hair_left_mesh,
             self.hair_middle_mesh,
             self.hair_right_mesh,
             self.hair_front_left_shadow_mesh,
@@ -387,8 +406,22 @@ class MyGame(arcade.Window):
             self.hair_front_right_shadow_mesh,
         ]:
             front_hair.apply_bend(bend_val, self.total_time)
-
         self.back_hair_mesh.apply_bend(-bend_val * 0.2, self.total_time)
+
+        head_angle = self.hair_bones[0].angle
+        gravity_target = head_angle * self.hair_physics_pendulum.gravity_power
+        final_angle = self.hair_physics_pendulum.update(
+            target_angle_offset=gravity_target, input_force=force
+        )
+        gain = 1.1
+        for i, b in enumerate(self.hair_bones):
+            if i == 0:
+                b.angle = head_angle + (-5 * final_angle) * 0.1
+            else:
+                b.angle = -5 * final_angle * gain
+                gain *= 1.1
+            b.update()
+        self.hair_left_mesh.update_skinning()
 
     def on_update(self, delta_time):
         with self.lock:

@@ -4,7 +4,7 @@ import numpy as np
 from array import array
 import arcade
 import math
-from bone_system import Bone
+from bone_system import Bone, load_bones
 
 
 class GridMesh:
@@ -263,7 +263,6 @@ class GridMesh:
         # 移回世界座標
         data[:, 0] = new_x  # + self.center_x
         data[:, 1] = new_y + top_y  # + self.center_y  # 防呆
-        print(data[-1])
 
         ## 正規化：Top = 0.0, Bottom = 1.0
         ## (這裡假設 Y 向上為正，如果你的座標系 Y 向下為正，公式要反過來)
@@ -292,6 +291,8 @@ class GridMesh:
 
         # 3. 綁定資源與渲染
         self.texture.use(0)
+        # may be this will false
+        # self.program["u_pos"] = (0, 0)
         self.program["u_pos"] = (self.center_x, self.center_y)
         self.program["u_proj"] = self.ctx.projection_matrix
         self.program["u_texture"] = 0
@@ -303,9 +304,18 @@ import numpy as np
 
 
 class SkinnedMesh(GridMesh):
-    def __init__(self, context, texture_path, bones, grid_size=(10, 10), scale=1.0):
+    def __init__(
+        self,
+        context,
+        texture_path,
+        bones,
+        grid_size=(10, 10),
+        scale=1.0,
+        parent=None,
+        data_key=None,
+    ):
         # 1. 先像以前一樣建立網格
-        super().__init__(context, texture_path, grid_size, scale)
+        super().__init__(context, texture_path, grid_size, scale, parent, data_key)
 
         self.bones = bones  # 骨骼列表 [Bone, Bone, ...]
 
@@ -316,65 +326,68 @@ class SkinnedMesh(GridMesh):
         self.vertex_local_positions = []
 
         # 3. 執行綁定 (Bind Pose Calculation)
-        self.bind_mesh_to_bones()
+        # self.bind_mesh_to_bones()
+        self.auto_smooth_bind()
 
-    def bind_mesh_to_bones(self):
-        # 準備數據
-        vertices = self.original_vertices.copy().reshape(-1, 4)
-
-        # 1. 找出網格的垂直範圍 (Y-Range)
-        # 假設 Y 軸向上為正 (Arcade 預設)，Top Y 是最大值
-        all_ys = vertices[:, 1]
-        max_y = np.max(all_ys)  # 髮根位置
-        min_y = np.min(all_ys)  # 髮尾位置
-        height = max_y - min_y
+    def auto_smooth_bind(self):
+        """
+        LBS (Linear Blend Skinning) 自動綁定算法。
+        每個頂點會尋找最近的 2 根骨頭，並根據距離反比分配權重。
+        """
+        print("執行自動柔性綁定 (Auto-Smooth Bind)...")
 
         # 確保骨頭是最新的
         for b in self.bones:
             b.update()
 
+        vertices = self.original_vertices.copy().reshape(-1, 4)
         self.vertex_weights = []
-        self.vertex_local_positions = []
-
-        print("--- 使用垂直線性權重 (Linear Gradient) ---")
 
         for i, _ in enumerate(vertices):
-            vx, vy = vertices[i][0] + self.center_x, vertices[i][1] + self.center_y
+            vx = vertices[i][0] + self.center_x
+            vy = vertices[i][1] + self.center_y
 
-            # --- 核心修改開始 ---
+            # 1. 算出到每一根骨頭的距離
+            # 格式: (distance, bone_index)
+            dist_list = []
+            for b_idx, bone in enumerate(self.bones):
+                bx, by = bone.get_world_position()
+                dist = np.sqrt((vx - bx) ** 2 + (vy - by) ** 2)
+                dist_list.append((dist, b_idx))
 
-            # 2. 計算該頂點在垂直高度上的比例 (0.0 ~ 1.0)
-            # 1.0 = 最頂端 (Root), 0.0 = 最底端 (Tip)
-            if height > 0:
-                ratio = (vy - min_y) / height
-            else:
-                ratio = 0.5  # 防呆
+            # 2. 排序，取出最近的 2 根 (Top 2)
+            dist_list.sort(key=lambda x: x[0])
+            top_2 = dist_list[:2]
 
-            # 3. 強制分配權重
-            # 假設 bones[0] 是 Root, bones[1] 是 Tip
-            # 我們可以加一點 "Power" 讓過渡更硬一點，避免中間太軟
-            # ratio = ratio ** 0.5 (如果想要髮根影響範圍更大)
+            # 3. 計算權重 (Inverse Distance)
+            # 公式: weight = 1 / distance
+            # 注意: 如果距離極小 (剛好在骨頭上)，要避免除以零
+            raw_weights = []
+            indices = []
 
-            w_root = ratio
+            for dist, b_idx in top_2:
+                # 加上一個極小值 epsilon (0.001) 避免除以零
+                w = 1.0 / (dist + 0.001)
 
-            # 儲存權重 (Root index=0, Tip index=1)
-            final_weights = [(0, w_root)]
+                # 如果想要「偏重最近的那根」，可以用平方: w = 1.0 / (dist * dist + 0.001)
 
-            # --- 核心修改結束 ---
+                raw_weights.append(w)
+                indices.append(b_idx)
+
+            # 4. 正規化 (Normalization)
+            # 讓權重總和為 1.0 (例如 0.7 + 0.3 = 1.0)
+            total_w = sum(raw_weights)
+            final_weights = []
+
+            for k in range(len(raw_weights)):
+                normalized_w = raw_weights[k] / total_w
+                final_weights.append((indices[k], normalized_w))
 
             self.vertex_weights.append(final_weights)
 
-            # 4. 計算相對座標 (這部分跟之前一樣)
-            local_pos_map = {}
-            v_vec = np.array([vx, vy, 1.0])
-
-            for b_idx, w in final_weights:
-                target_bone = self.bones[b_idx]
-                inv_matrix = np.linalg.inv(target_bone.world_matrix)
-                v_local = inv_matrix @ v_vec
-                local_pos_map[b_idx] = (v_local[0], v_local[1])
-
-            self.vertex_local_positions.append(local_pos_map)
+        # 綁定完一定要重算 Local Position
+        self.recalculate_local_positions()
+        print("柔性綁定完成！")
 
     def update_skinning(self):
         """
@@ -469,55 +482,42 @@ class SkinnedMesh(GridMesh):
         print(f"Recalculated local positions for {len(vertices)} vertices.")
 
 
-test_path = "assets/sample_model/processed/HairFront.png"
+test_path = "assets/sample_model/processed/FrontHairLeft.png"
+
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
 
 
 class MyWindow(arcade.Window):
     def __init__(self):
-        super().__init__(800, 600, "Level 3: Mesh Test")
+        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, "Level 3: Mesh Test")
         arcade.set_background_color(arcade.color.GREEN)
-
-        self.root = Bone("Root", y=0)
-        self.tip = Bone("Tip", y=-100, parent=self.root)
 
         # 這裡不使用 arcade.SpriteList，因為我們是自繪幾何
         # 初始化 GridMesh (建議把 front_hair 路徑換上去)
+        self.bones = load_bones("assets/hair_bones.json")
         self.hair_mesh = SkinnedMesh(
             self.ctx,
             texture_path=test_path,
-            grid_size=(10, 10),
-            scale=1.0,
-            bones=[self.root, self.tip],
+            bones=self.bones,
         )
-        SCREEN_WIDTH = 800
-        SCREEN_HEIGHT = 600
-
-        self.x = self.hair_mesh.center_x = SCREEN_WIDTH / 2
-        self.y = self.hair_mesh.center_y = SCREEN_HEIGHT / 2
-        self.hair_mesh.x = self.hair_mesh.center_x
-        self.hair_mesh.y = self.hair_mesh.center_y
+        self.camera = arcade.Camera2D()
+        self.camera.position = (0, 0)
         # ... (初始化代碼) ...
         self.total_time = 0.0
 
     def on_draw(self):
         self.clear()
+        self.camera.use()
         # 直接呼叫我們寫的 draw
         self.hair_mesh.draw()
         # Debug: 畫出骨頭節點
-        for bone in self.root, self.tip:
+        for bone in self.bones:
             wx, wy = bone.get_world_position()
-            wx += self.x
-            wy += self.y
             arcade.draw_circle_filled(wx, wy, 5, arcade.color.RED)
 
             if bone.parent:
                 px, py = bone.parent.get_world_position()
-                px += self.x
-                py += self.y
-                arcade.draw_line(wx, wy, px, py, arcade.color.YELLOW, 2)
-            else:
-                px = self.x
-                py = self.y
                 arcade.draw_line(wx, wy, px, py, arcade.color.YELLOW, 2)
 
     def on_update(self, delta_time):
@@ -525,12 +525,13 @@ class MyWindow(arcade.Window):
 
         # 產生一個來回擺動的數值 (-1.0 ~ 1.0)
         bend_value = np.sin(self.total_time * 3.0)
-        self.root.angle = bend_value * 10.0
-        self.tip.angle = 5 * bend_value * 10.0
-        self.root.update()
-        self.tip.update()
-        # 呼叫我們剛寫的彎曲函式
-        # self.hair_mesh.apply_bend(bend_value)
+        gain = 1.1
+        for b in self.bones:
+            b.angle = bend_value * 1.0 * gain
+            gain *= 1.1
+            b.update()
+        ## 呼叫我們剛寫的彎曲函式
+        ## self.hair_mesh.apply_bend(bend_value)
         self.hair_mesh.update_skinning()
 
 

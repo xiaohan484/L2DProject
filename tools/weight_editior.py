@@ -34,8 +34,8 @@ class RiggingEditor(arcade.Window):
         self.selected_bone = None  # 目前選中的骨頭物件
 
         # 嘗試載入骨骼，如果沒有則建立預設的
-        if os.path.exists("../assets/hair_bones.json"):
-            self.load_bones("../assets/hair_bones.json")
+        if os.path.exists("assets/hair_bones.json"):
+            self.load_bones("assets/hair_bones.json")
         else:
             # 預設至少要有一根 Root
             root = Bone("Root", 0, 0)
@@ -45,9 +45,9 @@ class RiggingEditor(arcade.Window):
         from Const import MODEL_PATH
 
         # 2. 載入 Mesh (注意：Mesh 初始化時需要骨頭列表)
-        self.mesh = SkinnedMesh(self.ctx, f"{MODEL_PATH}/HairFront.png", self.bones)
-        self.mesh.center_x = SCREEN_WIDTH / 2
-        self.mesh.center_y = SCREEN_HEIGHT / 2
+        self.mesh = SkinnedMesh(self.ctx, f"{MODEL_PATH}/FrontHairLeft.png", self.bones)
+        self.camera = arcade.Camera2D()
+        self.ui_camera = arcade.Camera2D()
         self.mouse_x = 0
         self.mouse_y = 0
 
@@ -64,18 +64,25 @@ class RiggingEditor(arcade.Window):
         bone_map = {}  # name -> Bone Object
 
         # 第一輪：建立物件
+        parent_x = 0
+        parent_y = 0
         for b_data in data:
             bone = Bone(b_data["name"], b_data["x"], b_data["y"])
+            bone.x += parent_x
+            bone.y += parent_y
+            bone.update()
             self.bones.append(bone)
             bone_map[bone.name] = bone
+            parent_x = bone.x
+            parent_y = bone.y
 
         # 第二輪：建立連結
-        for b_data in data:
-            if b_data["parent"]:
-                child = bone_map[b_data["name"]]
-                parent = bone_map[b_data["parent"]]
-                child.parent = parent
-                parent.children.append(child)
+        # for b_data in data:
+        #    if b_data["parent"]:
+        #        child = bone_map[b_data["name"]]
+        #        parent = bone_map[b_data["parent"]]
+        #        child.parent = parent
+        #        parent.children.append(child)
 
         # 預設選中第一根
         if self.bones:
@@ -85,16 +92,49 @@ class RiggingEditor(arcade.Window):
     def save_bones(self, filepath):
         """將骨骼存檔"""
         data = []
+        parent = None
+        parent_name = ""
+        count = 0
         for b in self.bones:
-            parent_name = b.parent.name if b.parent else None
-            data.append({"name": b.name, "x": b.x, "y": b.y, "parent": parent_name})
+            if parent is None:
+                bx, by = b.x, b.y
+            else:
+                bx, by = b.x - parent.x, b.y - parent.y
+            data.append(
+                {"name": f"node{count}", "x": bx, "y": by, "parent": parent_name}
+            )
+            parent = b
+            parent_name = f"node{count}"
+            count += 1
         with open(filepath, "w") as f:
             json.dump(data, f, indent=2)
         print("骨骼已存檔！")
 
+    def update_camera_range(self):
+        self.camera.position = (0, 0)
+
+    def on_mouse_scroll(self, x: int, y: int, scroll_x: int, scroll_y: int):
+        """
+        x, y: 滑鼠目前的座標
+        scroll_x: 橫向滾動 (通常較少用到)
+        scroll_y: 縱向滾動 (1.0 = 向上, -1.0 = 向下)
+        """
+        zoom_speed = 0.1
+        min_zoom = 0.5
+        max_zoom = 4
+        # 1. 計算新的縮放值
+        dir = scroll_y / abs(scroll_y)
+        new_zoom = self.camera.zoom * (1 + dir * zoom_speed)
+
+        # 2. 限制範圍 (Clamp)，避免縮放過小導致畫面反轉或過大
+        self.camera.zoom = max(min_zoom, min(new_zoom, max_zoom))
+
+        # print(f"Current Zoom: {self.camera.zoom:.2f}")
+
     def on_draw(self):
         self.clear()
-
+        self.update_camera_range()
+        self.camera.use()
         # 畫 Mesh
         self.mesh.draw()
 
@@ -151,6 +191,7 @@ class RiggingEditor(arcade.Window):
                 )
 
                 arcade.draw_point(vx, vy, color, 3)
+        self.ui_camera.use()
 
         # UI 狀態顯示
         mode_str = (
@@ -161,22 +202,23 @@ class RiggingEditor(arcade.Window):
         )
 
         sel_name = self.selected_bone.name if self.selected_bone else "None"
-        arcade.draw_text(f"Selected: {sel_name}", 10, 560, arcade.color.WHITE, 14)
+        arcade.draw_text(f"Selected: {sel_name}", 10, 560, arcade.color.BLACK, 20)
 
         arcade.draw_text(
             "S: Save All | N: New Bone (Child) | Click: Select/Move/Paint",
             10,
             10,
-            arcade.color.WHITE,
-            12,
+            arcade.color.BLACK,
+            20,
         )
 
     def on_mouse_motion(self, x, y, dx, dy):
         """
         Called whenever the mouse moves.
         """
-        self.mouse_x = x
-        self.mouse_y = y
+        world_vec = self.camera.unproject((x, y))
+        self.mouse_x = world_vec.x
+        self.mouse_y = world_vec.y
         return
 
     def on_key_press(self, key, modifiers):
@@ -185,12 +227,11 @@ class RiggingEditor(arcade.Window):
         elif key == arcade.key.W:
             self.mode = MODE_WEIGHT
         elif key == arcade.key.S:
-            self.save_bones("../assets/hair_bones.json")
-            self.mesh.save_weights_to_file("../assets/hair_weights.json")
+            self.save_bones("assets/hair_bones.json")
+            # self.mesh.save_weights_to_file("../assets/hair_weights.json")
         elif key == arcade.key.N and self.mode == MODE_BONE:
             # 【新增骨頭】在滑鼠位置附近，或是目前骨頭的下方
             if self.selected_bone:
-                print(self.mouse_x, self.mouse_y)
                 new_bone = Bone(
                     f"Bone_{len(self.bones)}",
                     self.mouse_x,
@@ -205,6 +246,9 @@ class RiggingEditor(arcade.Window):
 
     def on_mouse_press(self, x, y, button, modifiers):
         # 通用邏輯：先檢查有沒有點到骨頭 (選取骨頭)
+        world_vec = self.camera.unproject((x, y))
+        x = world_vec.x
+        y = world_vec.y
         min_dist = 15 * 15
         clicked_bone = None
         for bone in self.bones:
@@ -221,7 +265,6 @@ class RiggingEditor(arcade.Window):
         if self.mode == MODE_BONE:
             # 骨頭模式：如果沒點到骨頭，且按著滑鼠，可能是要拖曳目前選中的骨頭
             # 這裡簡化：點擊空白處移動目前骨頭
-            print("bone mode:", x, y)
             if self.selected_bone:
                 self.selected_bone.x = x
                 self.selected_bone.y = y
@@ -230,7 +273,6 @@ class RiggingEditor(arcade.Window):
                 # 但 Rigging 階段通常假設 Mesh 跟著骨頭走，先不重算
 
         elif self.mode == MODE_WEIGHT:
-            print("bone weight")
             # 權重模式：刷網格
             if self.selected_bone:
                 # 找出選中骨頭的 index
