@@ -12,16 +12,58 @@ from bone_system import load_bones
 import time
 
 
+def initial_coor(sprite, data):
+    sprite.anchor_x_ratio = data.get("anchor_x", 0.5)
+    sprite.anchor_y_ratio = data.get("anchor_y", 0.5)
+    raw_global_x = data["global_center_x"]
+    raw_global_y = data["global_center_y"]
+    if sprite.parent:
+        # 如果有爸爸，我的位置 = 我的絕對位置 - 爸爸的絕對位置
+        # 這樣不管爸爸之後跑到哪，我們的相對距離都保持不變
+        # sprite.local_x = raw_global_x - parent.initial_global_x
+        # sprite.local_y = raw_global_y - parent.initial_global_y
+        # 計算出初始的相對位置
+        base_x = raw_global_x - sprite.parent.initial_global_x
+        base_y = raw_global_y - sprite.parent.initial_global_y
+        # [修改] 設定 Base 和 Initial Local
+        sprite.base_local_x = base_x
+        sprite.base_local_y = base_y
+        sprite.local_x = base_x
+        sprite.local_y = base_y
+        sprite.initial_global_x = raw_global_x
+        sprite.initial_global_y = raw_global_yal_y = raw_global_y
+    else:
+        ## 如果是根節點 (Root)，直接放在畫面中間 (或你想要的位置)
+        ## 這裡我們稍微 hack 一下，把 JSON 裡的座標 mapping 到螢幕中心
+        # sprite.center_x = SCREEN_WIDTH / 2
+        # sprite.center_y = SCREEN_HEIGHT / 2 - 200 # 往下移一點才看得到頭
+        ## 記錄初始絕對座標，給孩子們參考用
+        # sprite.initial_global_x = raw_global_x
+        # sprite.initial_glob
+
+        # 【修改點 2 & 3】重新定位根節點 (Root)
+        # 如果是根節點 (臉)，把它放在視窗的正中心
+        sprite.base_local_x = 0
+        # Y 軸通常需要微調。
+        # 如果設為 SCREEN_HEIGHT / 2，臉的正中心會在畫面正中心。
+        # 如果想讓下巴多露出一點，可以減去一個數字 (例如 -50)
+        # 如果想讓頭頂多露出一點，可以加上一個數字 (例如 +50)
+        sprite.base_local_y = 0 - 950 * GLOBAL_SCALE  # 試著改成 +50 或 -50 看看效果
+        sprite.center_x = sprite.base_local_x
+        sprite.center_y = sprite.base_local_y
+        # 記錄初始絕對座標 (這兩行不變)
+        sprite.initial_global_x = raw_global_x
+        sprite.initial_global_y = raw_global_yal_y = raw_global_y
+
+
 class MyGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
 
         self.tracker = AsyncFaceTracker()
         self.calibration = (-0.5867841357630763, -0.5041574138173885)
-
         arcade.set_background_color(arcade.color.GREEN)
         self.all_sprites = arcade.SpriteList()
-        self.setup_scene()
         self.face_info = None
         self.lock = threading.Lock()
         pub.subscribe(self.notify_face_info, "FaceInfo")
@@ -32,6 +74,10 @@ class MyGame(arcade.Window):
         )
         self.last_yaw = 0
         self.total_time = 0
+        self.camera = arcade.Camera2D()
+        self.camera.position = (0, 0)
+        self.hair_bones = None
+        self.setup_scene()
 
     def notify_face_info(self, face_info):
         with self.lock:
@@ -76,57 +122,8 @@ class MyGame(arcade.Window):
             sprite = VTSprite(
                 filepath, scale=GLOBAL_SCALE, parent=parent, data_key=name
             )  # scale 可全域調整
-
-        # 2. 讀取錨點設定
-        sprite.anchor_x_ratio = data.get("anchor_x", 0.5)
-        sprite.anchor_y_ratio = data.get("anchor_y", 0.5)
-
-        # 3. 處理座標系轉換 (最重要的一步！)
-        # Krita (Y向下) -> Arcade (Y向上)
-        raw_global_x = data["global_center_x"]
-        # 注意：這裡要把 Y 軸翻轉過來
-        raw_global_y = data["global_center_y"]
-
+        initial_coor(sprite, data)
         # 4. 計算 Local Position (相對位置)
-        if parent:
-            # 如果有爸爸，我的位置 = 我的絕對位置 - 爸爸的絕對位置
-            # 這樣不管爸爸之後跑到哪，我們的相對距離都保持不變
-            # sprite.local_x = raw_global_x - parent.initial_global_x
-            # sprite.local_y = raw_global_y - parent.initial_global_y
-            # 計算出初始的相對位置
-            base_x = raw_global_x - parent.initial_global_x
-            base_y = raw_global_y - parent.initial_global_y
-            # [修改] 設定 Base 和 Initial Local
-            sprite.base_local_x = base_x
-            sprite.base_local_y = base_y
-            sprite.local_x = base_x
-            sprite.local_y = base_y
-            sprite.initial_global_x = raw_global_x
-            sprite.initial_global_y = raw_global_yal_y = raw_global_y
-        else:
-            ## 如果是根節點 (Root)，直接放在畫面中間 (或你想要的位置)
-            ## 這裡我們稍微 hack 一下，把 JSON 裡的座標 mapping 到螢幕中心
-            # sprite.center_x = SCREEN_WIDTH / 2
-            # sprite.center_y = SCREEN_HEIGHT / 2 - 200 # 往下移一點才看得到頭
-            ## 記錄初始絕對座標，給孩子們參考用
-            # sprite.initial_global_x = raw_global_x
-            # sprite.initial_glob
-
-            # 【修改點 2 & 3】重新定位根節點 (Root)
-            # 如果是根節點 (臉)，把它放在視窗的正中心
-            sprite.base_local_x = SCREEN_WIDTH / 2
-            # Y 軸通常需要微調。
-            # 如果設為 SCREEN_HEIGHT / 2，臉的正中心會在畫面正中心。
-            # 如果想讓下巴多露出一點，可以減去一個數字 (例如 -50)
-            # 如果想讓頭頂多露出一點，可以加上一個數字 (例如 +50)
-            sprite.base_local_y = (
-                SCREEN_HEIGHT / 2 - 950 * GLOBAL_SCALE
-            )  # 試著改成 +50 或 -50 看看效果
-            sprite.center_x = sprite.base_local_x
-            sprite.center_y = sprite.base_local_y
-            # 記錄初始絕對座標 (這兩行不變)
-            sprite.initial_global_x = raw_global_x
-            sprite.initial_global_y = raw_global_yal_y = raw_global_y
         if append:
             self.all_sprites.append(sprite)
 
@@ -139,14 +136,14 @@ class MyGame(arcade.Window):
         parent: 父物件 Sprite
         """
         assert name in MODEL_DATA, f"⚠️ 警告: JSON 裡找不到 '{name}'"
-
         data = MODEL_DATA[name]
         filepath = os.path.join("assets/sample_model/processed", data["filename"])
         # 1. 建立 Sprite
         if skin_mesh:
-            self.hair_bones = load_bones(
-                "assets/sample_model/processed/FrontHairLeft.json"
-            )
+            if self.hair_bones is None:
+                self.hair_bones = load_bones(
+                    "assets/sample_model/processed/FrontHairLeft.json"
+                )
             mesh = SkinnedMesh(
                 self.ctx,
                 filepath,
@@ -165,57 +162,7 @@ class MyGame(arcade.Window):
                 parent=parent,
                 data_key=data,  # 10x10 的格子
             )
-
-        # 2. 讀取錨點設定
-        mesh.anchor_x_ratio = data.get("anchor_x", 0.5)
-        mesh.anchor_y_ratio = data.get("anchor_y", 0.5)
-
-        # 3. 處理座標系轉換 (最重要的一步！)
-        # Krita (Y向下) -> Arcade (Y向上)
-        raw_global_x = data["global_center_x"]
-        # 注意：這裡要把 Y 軸翻轉過來
-        raw_global_y = data["global_center_y"]
-
-        # 4. 計算 Local Position (相對位置)
-        if parent:
-            # 如果有爸爸，我的位置 = 我的絕對位置 - 爸爸的絕對位置
-            # 這樣不管爸爸之後跑到哪，我們的相對距離都保持不變
-            # sprite.local_x = raw_global_x - parent.initial_global_x
-            # sprite.local_y = raw_global_y - parent.initial_global_y
-            # 計算出初始的相對位置
-            base_x = raw_global_x - parent.initial_global_x
-            base_y = raw_global_y - parent.initial_global_y
-            # [修改] 設定 Base 和 Initial Local
-            mesh.base_local_x = base_x
-            mesh.base_local_y = base_y
-            mesh.local_x = base_x
-            mesh.local_y = base_y
-            mesh.initial_global_x = raw_global_x
-            mesh.initial_global_y = raw_global_yal_y = raw_global_y
-        else:
-            ## 如果是根節點 (Root)，直接放在畫面中間 (或你想要的位置)
-            ## 這裡我們稍微 hack 一下，把 JSON 裡的座標 mapping 到螢幕中心
-            # sprite.center_x = SCREEN_WIDTH / 2
-            # sprite.center_y = SCREEN_HEIGHT / 2 - 200 # 往下移一點才看得到頭
-            ## 記錄初始絕對座標，給孩子們參考用
-            # sprite.initial_global_x = raw_global_x
-            # sprite.initial_glob
-
-            # 【修改點 2 & 3】重新定位根節點 (Root)
-            # 如果是根節點 (臉)，把它放在視窗的正中心
-            mesh.base_local_x = SCREEN_WIDTH / 2
-            # Y 軸通常需要微調。
-            # 如果設為 SCREEN_HEIGHT / 2，臉的正中心會在畫面正中心。
-            # 如果想讓下巴多露出一點，可以減去一個數字 (例如 -50)
-            # 如果想讓頭頂多露出一點，可以加上一個數字 (例如 +50)
-            mesh.base_local_y = (
-                SCREEN_HEIGHT / 2 - 950 * GLOBAL_SCALE
-            )  # 試著改成 +50 或 -50 看看效果
-            mesh.center_x = mesh.base_local_x
-            mesh.center_y = mesh.base_local_y
-            # 記錄初始絕對座標 (這兩行不變)
-            mesh.initial_global_x = raw_global_x
-            mesh.initial_global_y = raw_global_yal_y = raw_global_y
+        initial_coor(mesh, data)
         return mesh
 
     def setup_scene(self):
@@ -231,33 +178,19 @@ class MyGame(arcade.Window):
         # 程式會自動算出它們相對於臉的 local_x/y
         self.face = self.create_vt_sprite("Face", parent=self.body)
         self.face_landmarks = self.create_vt_sprite("FaceLandmark", parent=self.face)
-        # self.all_sprites.append(self.face)
-
-        # 眼白 (底)
         self.eye_white_L = self.create_vt_sprite("EyeWhiteL", parent=self.face)
         self.eye_white_R = self.create_vt_sprite("EyeWhiteR", parent=self.face)
-
-        # 眼珠 (中)
         self.eye_pupil_L = self.create_vt_sprite("EyePupilL", parent=self.face)
         self.eye_pupil_R = self.create_vt_sprite("EyePupilR", parent=self.face)
-
         self.eye_lid_L = self.create_vt_sprite("EyeLidL", parent=self.face)
         self.eye_lid_R = self.create_vt_sprite("EyeLidR", parent=self.face)
-
-        # 睫毛 (上)
         self.eye_lash_L = self.create_vt_sprite("EyeLashL", parent=self.face)
         self.eye_lash_R = self.create_vt_sprite("EyeLashR", parent=self.face)
-
-        #
         self.eye_brow_L = self.create_vt_sprite("EyeBrowL", parent=self.face)
         self.eye_brow_R = self.create_vt_sprite("EyeBrowR", parent=self.face)
-
         self.mouth = self.create_vt_sprite("Mouth", parent=self.face)
 
         # 前髮 (最上層)
-        self.hair_front_left_shadow_mesh = self.create_mesh(
-            "FrontHairShadowLeft", parent=self.face
-        )
         self.hair_front_middle_shadow_mesh = self.create_mesh(
             "FrontHairShadowMiddle", parent=self.face
         )
@@ -266,6 +199,9 @@ class MyGame(arcade.Window):
         )
         self.hair_left_mesh = self.create_mesh(
             "FrontHairLeft", parent=self.face, skin_mesh=True
+        )
+        self.hair_front_left_shadow_mesh = self.create_mesh(
+            "FrontHairShadowLeft", parent=self.face, skin_mesh=True
         )
         self.hair_right_mesh = self.create_mesh("FrontHairRight", parent=self.face)
         self.hair_middle_mesh = self.create_mesh("FrontHairMiddle", parent=self.face)
@@ -311,15 +247,16 @@ class MyGame(arcade.Window):
 
     def on_draw(self):
         self.clear()
+        self.camera.use()
         for object in [
             self.back_hair_mesh,
             self.all_sprites,
             self.hair_front_middle_shadow_mesh,
             self.hair_front_left_shadow_mesh,
-            self.hair_front_right_shadow_mesh,
+            # self.hair_front_right_shadow_mesh,
             self.hair_middle_mesh,
             self.hair_left_mesh,
-            self.hair_right_mesh,
+            # self.hair_right_mesh,
         ]:
             object.draw()
 
@@ -401,14 +338,13 @@ class MyGame(arcade.Window):
         for front_hair in [
             self.hair_middle_mesh,
             self.hair_right_mesh,
-            self.hair_front_left_shadow_mesh,
             self.hair_front_middle_shadow_mesh,
             self.hair_front_right_shadow_mesh,
         ]:
             front_hair.apply_bend(bend_val, self.total_time)
         self.back_hair_mesh.apply_bend(-bend_val * 0.2, self.total_time)
 
-        head_angle = self.hair_bones[0].angle
+        head_angle = self.hair_bones[1].angle
         gravity_target = head_angle * self.hair_physics_pendulum.gravity_power
         final_angle = self.hair_physics_pendulum.update(
             target_angle_offset=gravity_target, input_force=force
@@ -416,12 +352,15 @@ class MyGame(arcade.Window):
         gain = 1.1
         for i, b in enumerate(self.hair_bones):
             if i == 0:
+                b.angle = 0
+            elif i == 1:
                 b.angle = head_angle + (-5 * final_angle) * 0.1
             else:
                 b.angle = -5 * final_angle * gain
                 gain *= 1.1
             b.update()
         self.hair_left_mesh.update_skinning()
+        self.hair_front_left_shadow_mesh.update_skinning()
 
     def on_update(self, delta_time):
         with self.lock:
