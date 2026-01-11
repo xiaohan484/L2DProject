@@ -7,6 +7,29 @@ import math
 from bone_system import Bone, load_bones
 
 
+def lerp_apply(bones, dx):
+    swing_force = -dx * 3.0
+    swing_force = max(-45, min(45, swing_force))
+
+    rest_angle = 0.0  # 目標：大家都想回到 0 度 (直髮)
+    stiffness = 0.1  # 回彈速度 (越大越硬，越小越軟)
+    drag = 0.9  # 阻尼 (保留上一幀多少角度，用來製造滑順感)
+    for i in range(1, len(bones)):
+        bone = bones[i]
+
+        # --- A. 計算目標角度 ---
+        # 基礎目標是回到 0 度
+        target = rest_angle
+
+        # 加上慣性影響 (越髮尾，影響越大，所以乘上 index)
+        # 這樣會產生「鞭子」般的漸進效果
+        inertia_influence = swing_force * (i * 0.4)
+        target += inertia_influence
+        bone.angle *= drag
+        diff = target - bone.angle
+        bone.angle += diff * stiffness
+
+
 class GridMesh:
     def __init__(
         self,
@@ -520,16 +543,143 @@ class MyWindow(arcade.Window):
                 px, py = bone.parent.get_world_position()
                 arcade.draw_line(wx, wy, px, py, arcade.color.YELLOW, 2)
 
+    # def on_update(self, delta_time):
+    #    # ---------------------------------------------------------
+    #    # 1. Root (髮根) - 絕對控制
+    #    # ---------------------------------------------------------
+    #    # [位置] 跟隨 PnP 的 X 軸 (模擬轉頭的視差)
+    #    # 假設 400 是畫布中心，0.5 是移動係數
+    #    target_root_x = 400 + (self.pnp.yaw * 0.5)
+
+    #    # [角度] 跟隨 PnP 的 Roll (歪頭)
+    #    # 這是頭髮唯一的「主動旋轉」來源
+    #    self.bones[0].angle = self.pnp.roll
+    #    self.bones[0].x = target_root_x
+    #    # self.bones[0].y 保持不變 (或跟隨 pitch)
+
+    #    # ---------------------------------------------------------
+    #    # 2. 計算慣性力 (Inertia Force)
+    #    # ---------------------------------------------------------
+    #    # 算出 Root 這一幀移動了多少距離
+    #    # 如果還沒有 last_root_x，先初始化它
+    #    if not hasattr(self, "last_root_x"):
+    #        self.last_root_x = target_root_x
+
+    #    dx = target_root_x - self.last_root_x
+    #    self.last_root_x = target_root_x  # 更新給下一幀用
+
+    #    # 把移動距離轉換成「甩動的角度」
+    #    # 移動越快 -> dx 越大 -> 甩動角度越大
+    #    # 負號 (-) 是因為慣性是反向的 (頭往右，頭髮往左甩)
+    #    swing_force = -dx * 3.0
+
+    #    # 限制最大甩動角度，避免頭髮斷掉 (Clamp)
+    #    # 例如限制在 -45度 到 45度 之間
+    #    swing_force = max(-45, min(45, swing_force))
+
+    #    # ---------------------------------------------------------
+    #    # 3. Children (髮身) - 滯後跟隨 (Lerp Logic)
+    #    # ---------------------------------------------------------
+    #    # 參數調教區
+    #    rest_angle = 0.0  # 目標：大家都想回到 0 度 (直髮)
+    #    stiffness = 0.1  # 回彈速度 (越大越硬，越小越軟)
+    #    drag = 0.9  # 阻尼 (保留上一幀多少角度，用來製造滑順感)
+
+    #    for i in range(1, len(self.bones)):
+    #        bone = self.bones[i]
+
+    #        # --- A. 計算目標角度 ---
+    #        # 基礎目標是回到 0 度
+    #        target = rest_angle
+
+    #        # 加上慣性影響 (越髮尾，影響越大，所以乘上 index)
+    #        # 這樣會產生「鞭子」般的漸進效果
+    #        inertia_influence = swing_force * (i * 0.4)
+    #        target += inertia_influence
+
+    #        # --- B. 執行 Lerp (平滑插值) ---
+    #        # 公式: Current = (Current * drag) + (Target * (1 - drag)) * stiffness?
+    #        # 簡化版 Lerp: Current += (Target - Current) * speed
+
+    #        # 這裡我們用一個簡單的混合邏輯：
+    #        # 1. 先讓它自然衰減 (Damping)
+    #        bone.angle *= drag
+
+    #        # 2. 再讓它慢慢靠近目標 (Approach Target)
+    #        diff = target - bone.angle
+    #        bone.angle += diff * stiffness
+
+    #    # ---------------------------------------------------------
+    #    # 4. 更新矩陣
+    #    # ---------------------------------------------------------
+    #    self.bones[0].update()
+    #    self.hair_mesh.update_skinning()
+    def on_update(self, delta_time):
+        # 1. 取得平滑後的位置 (這一步一定要做，不然加速度雜訊會爆炸)
+        raw_x = 400 + (self.pnp.yaw * 0.5)
+        clean_x = self.smooth_root_x.update(raw_x)
+
+        # 2. 計算速度 (Velocity)
+        # current - last
+        velocity = clean_x - self.last_smoothed_x
+        self.last_smoothed_x = clean_x  # 更新給下一幀用
+
+        # 3. 【關鍵修正】計算加速度 (Acceleration)
+        # 加速度 = 速度的變化量
+        # 如果這一幀速度是 0，上一幀是 10 -> 加速度就是 -10 (急停!)
+        if not hasattr(self, "last_velocity"):
+            self.last_velocity = 0.0
+
+        acceleration = velocity - self.last_velocity
+        self.last_velocity = velocity  # 更新給下一幀用
+
+        # 4. 計算慣性力 (Inertia Force)
+        # F = -ma (負號是因為慣性方向相反)
+        # 係數通常要給大一點，因為加速度數值通常很小
+        inertia_force = -acceleration * 15.0
+
+        # 5. (選用) 混合一點風阻
+        # 純加速度有時候會太乾淨，加一點點速度項可以模擬空氣濃稠感
+        # Total Force = Inertia (主) + Drag (輔)
+        drag_force = -velocity * 2.0
+
+        total_force = inertia_force + drag_force
+
+        # 限制最大力道 (Clamp)
+        total_force = max(-45, min(45, total_force))
+
+        # 6. 應用到頭髮
+        stiffness = 0.08
+        drag = 0.9
+
+        for i in range(1, len(self.bones)):
+            bone = self.bones[i]
+
+            # 讓力道隨著骨骼傳遞放大 (鞭子效應)
+            force_on_bone = total_force * (i * 0.6)
+
+            # Lerp 邏輯
+            target = 0 + force_on_bone
+            bone.angle *= drag
+            bone.angle += (target - bone.angle) * stiffness
+
+        # Update
+        self.bones[0].x = clean_x  # 記得更新 Root 位置
+        self.bones[0].update()
+        self.hair_mesh.update_skinning()
+
     def on_update(self, delta_time):
         self.total_time += delta_time
 
         # 產生一個來回擺動的數值 (-1.0 ~ 1.0)
-        bend_value = np.sin(self.total_time * 3.0)
-        gain = 1.1
-        for b in self.bones:
-            b.angle = bend_value * 1.0 * gain
-            gain *= 1.1
-            b.update()
+        self.bones[0].center_x = 30 * np.sin(self.total_time * 3.0)
+        target_root_x = self.bones[0].center_x
+        if not hasattr(self, "last_root_x"):
+            self.last_root_x = target_root_x
+        dx = target_root_x - self.last_root_x
+        lerp_apply(self.bones, dx)
+        self.bones[0].update()
+        self.last_root_x = self.bones[0].center_x
         ## 呼叫我們剛寫的彎曲函式
         ## self.hair_mesh.apply_bend(bend_value)
         self.hair_mesh.update_skinning()

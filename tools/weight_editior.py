@@ -68,13 +68,13 @@ class RiggingEditor(arcade.Window):
         parent_y = 0
         for b_data in data:
             bone = Bone(b_data["name"], b_data["x"], b_data["y"])
-            bone.x += parent_x
-            bone.y += parent_y
+            bone.center_x += parent_x
+            bone.center_y += parent_y
             bone.update()
             self.bones.append(bone)
             bone_map[bone.name] = bone
-            parent_x = bone.x
-            parent_y = bone.y
+            parent_x = bone.center_x
+            parent_y = bone.center_y
 
         # 第二輪：建立連結
         # for b_data in data:
@@ -97,9 +97,9 @@ class RiggingEditor(arcade.Window):
         count = 0
         for b in self.bones:
             if parent is None:
-                bx, by = b.x, b.y
+                bx, by = b.center_x, b.center_y
             else:
-                bx, by = b.x - parent.x, b.y - parent.y
+                bx, by = b.center_x - parent.center_x, b.center_y - parent.center_y
             data.append(
                 {"name": f"node{count}", "x": bx, "y": by, "parent": parent_name}
             )
@@ -266,8 +266,8 @@ class RiggingEditor(arcade.Window):
             # 骨頭模式：如果沒點到骨頭，且按著滑鼠，可能是要拖曳目前選中的骨頭
             # 這裡簡化：點擊空白處移動目前骨頭
             if self.selected_bone:
-                self.selected_bone.x = x
-                self.selected_bone.y = y
+                self.selected_bone.center_x = x
+                self.selected_bone.center_y = y
                 self.selected_bone.update()  # 更新矩陣
                 # 骨頭動了，Local Position 就失效了，理論上要重算，
                 # 但 Rigging 階段通常假設 Mesh 跟著骨頭走，先不重算

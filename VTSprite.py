@@ -38,10 +38,6 @@ class VTSprite(arcade.Sprite):
         self.local_angle = 0
         self.local_scale_y = 1.0
 
-        # 錨點 (0.0 ~ 1.0)，預設中心
-        self.anchor_x_ratio = 0.5
-        self.anchor_y_ratio = 0.5
-
     def update_transform(self):
         """核心：遞迴更新座標"""
         if self.parent:
@@ -66,10 +62,6 @@ class VTSprite(arcade.Sprite):
 
             # 特別處理：眨眼縮放 (Y軸)
             self.height = self.texture.height * self.scale[1] * self.local_scale_y
-
-            # TODO: 這裡尚未實作 "自身錨點旋轉" (Self-Pivot)，
-            # 目前旋轉是以 Sprite 中心為主。如果要讓頭部繞著脖子轉，
-            # 需要再加一段 offset math，但 MVP 先這樣即可。
         else:
             self.center_x = self.local_x
             self.center_y = self.local_y

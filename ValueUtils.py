@@ -39,7 +39,7 @@ class SpringDamper:
         self.velocity += force
         self.position += self.velocity
 
-        return self.position
+        return self.position, self.velocity
 
     import math
 

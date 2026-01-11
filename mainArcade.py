@@ -7,14 +7,13 @@ from VTSprite import *
 import arcade
 from tracker import AsyncFaceTracker
 from ValueUtils import *
-from mesh_renderer import GridMesh, SkinnedMesh
+from mesh_renderer import GridMesh, SkinnedMesh, lerp_apply
 from bone_system import load_bones
 import time
+import numpy as np
 
 
 def initial_coor(sprite, data):
-    sprite.anchor_x_ratio = data.get("anchor_x", 0.5)
-    sprite.anchor_y_ratio = data.get("anchor_y", 0.5)
     raw_global_x = data["global_center_x"]
     raw_global_y = data["global_center_y"]
     if sprite.parent:
@@ -333,7 +332,7 @@ class MyGame(arcade.Window):
         # 這裡的 scaling_factor 很重要，用來把「角度差」轉換成「彎曲力道」
         # 負號是因為慣性方向相反 (頭向左，髮尾甩向右)
         force = -yaw_velocity * 0.01
-        bend_val = self.hair_physics.update(force)
+        bend_val, _ = self.hair_physics.update(force)
         # 4. 驅動網格
         for front_hair in [
             self.hair_middle_mesh,
@@ -344,6 +343,7 @@ class MyGame(arcade.Window):
             front_hair.apply_bend(bend_val, self.total_time)
         self.back_hair_mesh.apply_bend(-bend_val * 0.2, self.total_time)
 
+        # pendulum
         head_angle = self.hair_bones[1].angle
         gravity_target = head_angle * self.hair_physics_pendulum.gravity_power
         final_angle = self.hair_physics_pendulum.update(
@@ -358,7 +358,7 @@ class MyGame(arcade.Window):
             else:
                 b.angle = -5 * final_angle * gain
                 gain *= 1.1
-            b.update()
+        self.hair_bones[0].update()
         self.hair_left_mesh.update_skinning()
         self.hair_front_left_shadow_mesh.update_skinning()
 

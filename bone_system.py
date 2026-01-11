@@ -41,8 +41,8 @@ class Bone:
 
         # === Local Transform (本地屬性) ===
         # 這些是你每一幀會去修改的數值 (例如透過物理或 PnP)
-        self.x = x
-        self.y = y
+        self.center_x = x
+        self.center_y = y
         self.angle = angle  # 單位：度 (Degree)
         self.scale_x = scale_x
         self.scale_y = scale_y
@@ -67,8 +67,8 @@ class Bone:
         # M = T * R * S
         self.local_matrix = np.array(
             [
-                [self.scale_x * cos_a, -self.scale_y * sin_a, self.x],
-                [self.scale_x * sin_a, self.scale_y * cos_a, self.y],
+                [self.scale_x * cos_a, -self.scale_y * sin_a, self.center_x],
+                [self.scale_x * sin_a, self.scale_y * cos_a, self.center_y],
                 [0, 0, 1],
             ]
         )
