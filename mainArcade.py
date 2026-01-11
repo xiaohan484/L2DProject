@@ -11,20 +11,15 @@ from mesh_renderer import GridMesh, SkinnedMesh, lerp_apply
 from bone_system import load_bones
 import time
 import numpy as np
+from live2d import Live2DPart
 
 
 def initial_coor(sprite, data):
     raw_global_x = data["global_center_x"]
     raw_global_y = data["global_center_y"]
     if sprite.parent:
-        # 如果有爸爸，我的位置 = 我的絕對位置 - 爸爸的絕對位置
-        # 這樣不管爸爸之後跑到哪，我們的相對距離都保持不變
-        # sprite.local_x = raw_global_x - parent.initial_global_x
-        # sprite.local_y = raw_global_y - parent.initial_global_y
-        # 計算出初始的相對位置
         base_x = raw_global_x - sprite.parent.initial_global_x
         base_y = raw_global_y - sprite.parent.initial_global_y
-        # [修改] 設定 Base 和 Initial Local
         sprite.base_local_x = base_x
         sprite.base_local_y = base_y
         sprite.local_x = base_x
@@ -32,21 +27,7 @@ def initial_coor(sprite, data):
         sprite.initial_global_x = raw_global_x
         sprite.initial_global_y = raw_global_yal_y = raw_global_y
     else:
-        ## 如果是根節點 (Root)，直接放在畫面中間 (或你想要的位置)
-        ## 這裡我們稍微 hack 一下，把 JSON 裡的座標 mapping 到螢幕中心
-        # sprite.center_x = SCREEN_WIDTH / 2
-        # sprite.center_y = SCREEN_HEIGHT / 2 - 200 # 往下移一點才看得到頭
-        ## 記錄初始絕對座標，給孩子們參考用
-        # sprite.initial_global_x = raw_global_x
-        # sprite.initial_glob
-
-        # 【修改點 2 & 3】重新定位根節點 (Root)
-        # 如果是根節點 (臉)，把它放在視窗的正中心
         sprite.base_local_x = 0
-        # Y 軸通常需要微調。
-        # 如果設為 SCREEN_HEIGHT / 2，臉的正中心會在畫面正中心。
-        # 如果想讓下巴多露出一點，可以減去一個數字 (例如 -50)
-        # 如果想讓頭頂多露出一點，可以加上一個數字 (例如 +50)
         sprite.base_local_y = 0 - 950 * GLOBAL_SCALE  # 試著改成 +50 或 -50 看看效果
         sprite.center_x = sprite.base_local_x
         sprite.center_y = sprite.base_local_y
@@ -176,7 +157,31 @@ class MyGame(arcade.Window):
         # --- 2. 建立五官 (綁定在 Face 上) ---
         # 程式會自動算出它們相對於臉的 local_x/y
         self.face = self.create_vt_sprite("Face", parent=self.body)
-        self.face_landmarks = self.create_vt_sprite("FaceLandmark", parent=self.face)
+        # self.face_landmarks = self.create_vt_sprite("FaceLandmark", parent=self.face)
+        #
+        #
+        #
+        data = MODEL_DATA["FaceLandmark"]
+        filepath = os.path.join("assets/sample_model/processed", data["filename"])
+        sprite = arcade.Sprite(filepath, scale=GLOBAL_SCALE)  # scale 可全域調整
+        raw_global_x = data["global_center_x"]
+        raw_global_y = data["global_center_y"]
+
+        parent = self.face
+        self.face_landmarks = Live2DPart(
+            name="FaceLandmark",
+            parent=None,
+            x=raw_global_x - parent.initial_global_x,
+            y=raw_global_y - parent.initial_global_y,
+            scale_x=GLOBAL_SCALE,
+            scale_y=GLOBAL_SCALE,
+            angle=0,
+            view=sprite,
+        )
+
+        #
+        #
+        #
         self.eye_white_L = self.create_vt_sprite("EyeWhiteL", parent=self.face)
         self.eye_white_R = self.create_vt_sprite("EyeWhiteR", parent=self.face)
         self.eye_pupil_L = self.create_vt_sprite("EyePupilL", parent=self.face)
@@ -221,7 +226,7 @@ class MyGame(arcade.Window):
         )
         self.groups = {
             "FaceFeature": [
-                self.face_landmarks,
+                # self.face_landmarks,
                 self.mouth,
                 self.eye_white_L,
                 self.eye_white_R,
@@ -258,6 +263,7 @@ class MyGame(arcade.Window):
             # self.hair_right_mesh,
         ]:
             object.draw()
+        self.face_landmarks.draw()
 
     # def on_key_release(self, key, modifiers):
     # implement calibration
@@ -312,6 +318,8 @@ class MyGame(arcade.Window):
         face_info["FaceFeatureOffset"] = (move_x_front, move_y_front)
         face_info["FaceBaseOffset"] = (move_x_mid, move_y_mid)
         face_info["BackHairOffset"] = (move_x_back, move_y_back)
+
+        self.face_landmarks.update(move_x_front, move_y_front)
 
         for group, sprites in self.groups.items():
             add_x, add_y = face_info[group + "Offset"]

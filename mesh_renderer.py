@@ -5,6 +5,7 @@ from array import array
 import arcade
 import math
 from bone_system import Bone, load_bones
+from ValueUtils import PendulumPhysics
 
 
 def lerp_apply(bones, dx):
@@ -528,6 +529,9 @@ class MyWindow(arcade.Window):
         self.camera.position = (0, 0)
         # ... (初始化代碼) ...
         self.total_time = 0.0
+        self.hair_physics_pendulum = PendulumPhysics(
+            stiffness=0.01, damping=0.6, mass=1.0, gravity_power=1.0
+        )
 
     def on_draw(self):
         self.clear()
@@ -672,16 +676,33 @@ class MyWindow(arcade.Window):
         self.total_time += delta_time
 
         # 產生一個來回擺動的數值 (-1.0 ~ 1.0)
-        self.bones[0].center_x = 30 * np.sin(self.total_time * 3.0)
-        target_root_x = self.bones[0].center_x
-        if not hasattr(self, "last_root_x"):
-            self.last_root_x = target_root_x
-        dx = target_root_x - self.last_root_x
-        lerp_apply(self.bones, dx)
+        # self.bones[0].center_x = 30 * np.sin(self.total_time * 3.0)
+        # target_root_x = self.bones[0].center_x
+        # if not hasattr(self, "last_root_x"):
+        #    self.last_root_x = target_root_x
+        # dx = target_root_x - self.last_root_x
+        # lerp_apply(self.bones, dx)
+        # self.bones[0].update()
+        # self.last_root_x = self.bones[0].center_x
+        ### 呼叫我們剛寫的彎曲函式
+        ### self.hair_mesh.apply_bend(bend_value)
+
+        force = 0.01 * np.sin(self.total_time * 3.0)
+        head_angle = self.bones[1].angle
+        gravity_target = head_angle * self.hair_physics_pendulum.gravity_power
+        final_angle = self.hair_physics_pendulum.update(
+            target_angle_offset=gravity_target, input_force=force
+        )
+        gain = 1.1
+        for i, b in enumerate(self.bones):
+            if i == 0:
+                b.angle = 0
+            elif i == 1:
+                b.angle = head_angle + (-5 * final_angle) * 0.1
+            else:
+                b.angle = -5 * final_angle * gain
+                gain *= 1.1
         self.bones[0].update()
-        self.last_root_x = self.bones[0].center_x
-        ## 呼叫我們剛寫的彎曲函式
-        ## self.hair_mesh.apply_bend(bend_value)
         self.hair_mesh.update_skinning()
 
 

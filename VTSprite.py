@@ -70,6 +70,15 @@ class VTSprite(arcade.Sprite):
         for child in self.children:
             child.update_transform()
 
+    def set_child(self, child):
+        """
+        For migration temporary
+
+        :param self: Description
+        :param child: Description
+        """
+        return
+
 
 class MouthSprite(VTSprite):
     def __init__(
