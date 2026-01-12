@@ -406,3 +406,44 @@ class AsyncFaceTracker:
         if self.thread.is_alive():
             self.thread.join()
         self._tracker.release()
+
+
+class FakeTracker:
+    """
+    非同步追蹤器：用獨立執行緒跑 OpenCV，
+    確保主視窗被 Windows 卡住時 (例如拖曳視窗)，追蹤不會中斷。
+    """
+
+    def __init__(self):
+        pub.sendMessage(
+            "FaceInfo",
+            face_info={
+                "PupilsPos": (0, 0),
+                "Blinking": (0, 0),
+                "MouthOpenness": 0,
+                "Pose": (0, 0, 0),
+            },
+        )
+
+        self.running = True
+        self.thread = threading.Thread(target=self._update_loop, daemon=True)
+        self.thread.start()
+
+    def _update_loop(self):
+        """這是背景執行緒在做的事：不斷更新數據"""
+        while self.running:
+            pub.sendMessage(
+                "FaceInfo",
+                face_info={
+                    "PupilsPos": (0, 0),
+                    "Blinking": (1, 1),
+                    "MouthOpenness": 0,
+                    "Pose": (0, 0, 0),
+                },
+            )
+            # 稍微休息一下，避免吃光 CPU (約 60 FPS)
+            time.sleep(0.016)
+
+    def release(self):
+        self.running = False
+        return

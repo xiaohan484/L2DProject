@@ -5,13 +5,80 @@ import threading
 from Const import *
 from VTSprite import *
 import arcade
-from tracker import AsyncFaceTracker
+from tracker import AsyncFaceTracker, FakeTracker
 from ValueUtils import *
 from mesh_renderer import GridMesh, SkinnedMesh, lerp_apply
 from bone_system import load_bones
 import time
 import numpy as np
 from live2d import Live2DPart
+
+mode_mesh = 0
+mode_sprite = 1
+
+
+def load_local_position(global_pos, parent_global_pos, global_scale):
+    # Calculate the relative distance in global space
+    delta_x = global_pos[0] - parent_global_pos[0]
+    delta_y = global_pos[1] - parent_global_pos[1]
+
+    # Scale down the delta to get the original local position
+    local_x = delta_x / global_scale
+    local_y = delta_y / global_scale
+
+    return local_x, local_y
+
+
+def create_live2dpart(ctx, name, mode, parent=None):
+    data = MODEL_DATA[name]
+    filepath = os.path.join("assets/sample_model/processed", data["filename"])
+    raw_global_x = data["global_center_x"]
+    raw_global_y = data["global_center_y"]
+    if mode == mode_sprite:
+        view = arcade.Sprite(filepath, scale=GLOBAL_SCALE)  # scale 可全域調整
+    elif mode == mode_mesh:
+        view = GridMesh(
+            ctx,
+            filepath,
+            grid_size=(10, 10),
+            scale=GLOBAL_SCALE,
+            parent=None,
+            data_key=data,  # 10x10 的格子
+        )
+    else:
+        view = None
+
+    if parent == None:
+        return Live2DPart(
+            name=name,
+            parent=None,
+            x=0,
+            y=0,
+            scale_x=GLOBAL_SCALE,
+            scale_y=GLOBAL_SCALE,
+            angle=0,
+            view=view,
+        )
+    else:
+        parent_global = (
+            MODEL_DATA[parent.name]["global_center_x"],
+            MODEL_DATA[parent.name]["global_center_y"],
+        )
+        pos = load_local_position(
+            global_pos=(raw_global_x, raw_global_y),
+            parent_global_pos=parent_global,
+            global_scale=GLOBAL_SCALE,
+        )
+        return Live2DPart(
+            name=name,
+            parent=parent,
+            x=pos[0],
+            y=-pos[1],
+            scale_x=GLOBAL_SCALE,
+            scale_y=GLOBAL_SCALE,
+            angle=0,
+            view=view,
+        )
 
 
 def initial_coor(sprite, data):
@@ -37,10 +104,10 @@ def initial_coor(sprite, data):
 
 
 class MyGame(arcade.Window):
-    def __init__(self):
+    def __init__(self, tracker):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
 
-        self.tracker = AsyncFaceTracker()
+        self.tracker = tracker
         self.calibration = (-0.5867841357630763, -0.5041574138173885)
         arcade.set_background_color(arcade.color.GREEN)
         self.all_sprites = arcade.SpriteList()
@@ -55,7 +122,8 @@ class MyGame(arcade.Window):
         self.last_yaw = 0
         self.total_time = 0
         self.camera = arcade.Camera2D()
-        self.camera.position = (0, 0)
+        self.camera.position = (0, 950)
+        self.camera.zoom = 1.5
         self.hair_bones = None
         self.setup_scene()
 
@@ -145,125 +213,113 @@ class MyGame(arcade.Window):
         initial_coor(mesh, data)
         return mesh
 
+    def create_live2dpart(self, name, parent=None):
+        return create_live2dpart(self.ctx, name, mode_mesh, parent)
+
     def setup_scene(self):
         # --- 1. 建立根節點 (Face) ---
         # 假設你的 JSON 裡臉部叫做 "face" (如果不一樣請修改 key)
         # body
-        self.body = self.create_vt_sprite("Body", append=False)
-        self.back_hair_mesh = self.create_mesh("BackHair", parent=self.body)
+        body = self.create_live2dpart("Body")
+        back_hair = self.create_live2dpart("BackHair", body)
+        face = self.create_live2dpart("Face", body)
+        landmarks = self.create_live2dpart("FaceLandmark", face)
+        eye_white_L = self.create_live2dpart("EyeWhiteL", face)
+        eye_white_R = self.create_live2dpart("EyeWhiteR", face)
+        eye_pupil_L = self.create_live2dpart("EyePupilL", face)
+        eye_pupil_R = self.create_live2dpart("EyePupilR", face)
+        eye_lid_L = self.create_live2dpart("EyeLidL", face)
+        eye_lid_R = self.create_live2dpart("EyeLidR", face)
+        eye_lash_L = self.create_live2dpart("EyeLashL", face)
+        eye_lash_R = self.create_live2dpart("EyeLashR", face)
+        eye_brow_L = self.create_live2dpart("EyeBrowL", face)
+        eye_brow_R = self.create_live2dpart("EyeBrowR", face)
+        mouth = self.create_live2dpart("Mouth", face)
+        front_hair_left = self.create_live2dpart("FrontHairLeft", face)
+        front_hair_middle = self.create_live2dpart("FrontHairMiddle", face)
+        front_hair_middle_shadow = self.create_live2dpart("FrontHairShadowMiddle", face)
+        front_hair_left_shadow = self.create_live2dpart("FrontHairShadowLeft", face)
 
-        self.all_sprites.append(self.body)
+        self.drawlist = [
+            back_hair,
+            body,
+            face,
+            landmarks,
+            eye_white_L,
+            eye_white_R,
+            eye_pupil_L,
+            eye_pupil_R,
+            eye_lid_L,
+            eye_lid_R,
+            eye_lash_L,
+            eye_lash_R,
+            eye_brow_L,
+            eye_brow_R,
+            mouth,
+            front_hair_left_shadow,
+            front_hair_middle_shadow,
+            front_hair_left,
+            front_hair_middle,
+        ]
+        self.body = body
 
-        # --- 2. 建立五官 (綁定在 Face 上) ---
-        # 程式會自動算出它們相對於臉的 local_x/y
-        self.face = self.create_vt_sprite("Face", parent=self.body)
-        # self.face_landmarks = self.create_vt_sprite("FaceLandmark", parent=self.face)
-        #
-        #
-        #
-        data = MODEL_DATA["FaceLandmark"]
-        filepath = os.path.join("assets/sample_model/processed", data["filename"])
-        sprite = arcade.Sprite(filepath, scale=GLOBAL_SCALE)  # scale 可全域調整
-        raw_global_x = data["global_center_x"]
-        raw_global_y = data["global_center_y"]
-
-        parent = self.face
-        self.face_landmarks = Live2DPart(
-            name="FaceLandmark",
-            parent=None,
-            x=raw_global_x - parent.initial_global_x,
-            y=raw_global_y - parent.initial_global_y,
-            scale_x=GLOBAL_SCALE,
-            scale_y=GLOBAL_SCALE,
-            angle=0,
-            view=sprite,
-        )
-
-        #
-        #
-        #
-        self.eye_white_L = self.create_vt_sprite("EyeWhiteL", parent=self.face)
-        self.eye_white_R = self.create_vt_sprite("EyeWhiteR", parent=self.face)
-        self.eye_pupil_L = self.create_vt_sprite("EyePupilL", parent=self.face)
-        self.eye_pupil_R = self.create_vt_sprite("EyePupilR", parent=self.face)
-        self.eye_lid_L = self.create_vt_sprite("EyeLidL", parent=self.face)
-        self.eye_lid_R = self.create_vt_sprite("EyeLidR", parent=self.face)
-        self.eye_lash_L = self.create_vt_sprite("EyeLashL", parent=self.face)
-        self.eye_lash_R = self.create_vt_sprite("EyeLashR", parent=self.face)
-        self.eye_brow_L = self.create_vt_sprite("EyeBrowL", parent=self.face)
-        self.eye_brow_R = self.create_vt_sprite("EyeBrowR", parent=self.face)
-        self.mouth = self.create_vt_sprite("Mouth", parent=self.face)
-
-        # 前髮 (最上層)
-        self.hair_front_middle_shadow_mesh = self.create_mesh(
-            "FrontHairShadowMiddle", parent=self.face
-        )
-        self.hair_front_right_shadow_mesh = self.create_mesh(
-            "FrontHairShadowRight", parent=self.face
-        )
-        self.hair_left_mesh = self.create_mesh(
-            "FrontHairLeft", parent=self.face, skin_mesh=True
-        )
-        self.hair_front_left_shadow_mesh = self.create_mesh(
-            "FrontHairShadowLeft", parent=self.face, skin_mesh=True
-        )
-        self.hair_right_mesh = self.create_mesh("FrontHairRight", parent=self.face)
-        self.hair_middle_mesh = self.create_mesh("FrontHairMiddle", parent=self.face)
-
-        self.eye_lid_L.set_depend(
-            children={
-                "eye_lash": self.eye_lash_L,
-                "eye_white": self.eye_white_L,
-                "eye_pupil": self.eye_pupil_L,
-            }
-        )
-        self.eye_lid_R.set_depend(
-            children={
-                "eye_lash": self.eye_lash_R,
-                "eye_white": self.eye_white_R,
-                "eye_pupil": self.eye_pupil_R,
-            }
-        )
-        self.groups = {
-            "FaceFeature": [
-                # self.face_landmarks,
-                self.mouth,
-                self.eye_white_L,
-                self.eye_white_R,
-                self.eye_lid_L,
-                self.eye_lid_R,
-                self.eye_lash_L,
-                self.eye_lash_R,
-                self.eye_brow_L,
-                self.eye_brow_R,
-                self.hair_left_mesh,
-                self.hair_middle_mesh,
-                self.hair_right_mesh,
-            ],
-            "FrontShadow": [
-                self.hair_front_left_shadow_mesh,
-                self.hair_front_right_shadow_mesh,
-                self.hair_front_middle_shadow_mesh,
-            ],
-            "FaceBase": [self.face],
-            "BackHair": [self.back_hair_mesh],
-        }
+        # self.eye_lid_L.set_depend(
+        #    children={
+        #        "eye_lash": self.eye_lash_L,
+        #        "eye_white": self.eye_white_L,
+        #        "eye_pupil": self.eye_pupil_L,
+        #    }
+        # )
+        # self.eye_lid_R.set_depend(
+        #    children={
+        #        "eye_lash": self.eye_lash_R,
+        #        "eye_white": self.eye_white_R,
+        #        "eye_pupil": self.eye_pupil_R,
+        #    }
+        # )
+        # self.groups = {
+        #    "FaceFeature": [
+        #        # self.face_landmarks,
+        #        self.mouth,
+        #        self.eye_white_L,
+        #        self.eye_white_R,
+        #        self.eye_lid_L,
+        #        self.eye_lid_R,
+        #        self.eye_lash_L,
+        #        self.eye_lash_R,
+        #        self.eye_brow_L,
+        #        self.eye_brow_R,
+        #        self.hair_left_mesh,
+        #        self.hair_middle_mesh,
+        #        self.hair_right_mesh,
+        #    ],
+        #    "FrontShadow": [
+        #        self.hair_front_left_shadow_mesh,
+        #        self.hair_front_right_shadow_mesh,
+        #        self.hair_front_middle_shadow_mesh,
+        #    ],
+        #    "FaceBase": [self.face],
+        #    "BackHair": [self.back_hair_mesh],
+        # }
 
     def on_draw(self):
         self.clear()
         self.camera.use()
-        for object in [
-            self.back_hair_mesh,
-            self.all_sprites,
-            self.hair_front_middle_shadow_mesh,
-            self.hair_front_left_shadow_mesh,
-            # self.hair_front_right_shadow_mesh,
-            self.hair_middle_mesh,
-            self.hair_left_mesh,
-            # self.hair_right_mesh,
-        ]:
-            object.draw()
-        self.face_landmarks.draw()
+
+        for obj in self.drawlist:
+            obj.draw()
+        # for object in [
+        #    self.back_hair_mesh,
+        #    self.all_sprites,
+        #    self.hair_front_middle_shadow_mesh,
+        #    self.hair_front_left_shadow_mesh,
+        #    # self.hair_front_right_shadow_mesh,
+        #    self.hair_middle_mesh,
+        #    self.hair_left_mesh,
+        #    # self.hair_right_mesh,
+        # ]:
+        #    object.draw()
+        # self.face_landmarks.draw()
 
     # def on_key_release(self, key, modifiers):
     # implement calibration
@@ -280,8 +336,8 @@ class MyGame(arcade.Window):
         breath_wave = math.sin(time.time() * BREATH_SPEED)
         # 應用在身體 (Root) 的 Y 軸縮放
         # 1.0 是原始大小，加上波形變化
-        self.body.scale_y = GLOBAL_SCALE + breath_wave * BREATH_AMOUNT
-        self.body.scale_x = GLOBAL_SCALE + breath_wave * (
+        self.body.sy = GLOBAL_SCALE + breath_wave * BREATH_AMOUNT
+        self.body.sx = GLOBAL_SCALE + breath_wave * (
             BREATH_AMOUNT * 0.1
         )  # X軸稍微跟著動一點點會更自然
         return
@@ -377,19 +433,19 @@ class MyGame(arcade.Window):
             return
         self.total_time += delta_time
 
-        self.update_body()
-        self.update_pose(face_info)
-        self.mouth.update_state(face_info)
-        self.eye_pupil_L.update_state(face_info)
-        self.eye_pupil_R.update_state(face_info)
-        self.eye_lid_L.update_state(face_info)
-        self.eye_lid_R.update_state(face_info)
+        # self.update_body()
+        # self.update_pose(face_info)
+        # self.mouth.update_state(face_info)
+        # self.eye_pupil_L.update_state(face_info)
+        # self.eye_pupil_R.update_state(face_info)
+        # self.eye_lid_L.update_state(face_info)
+        # self.eye_lid_R.update_state(face_info)
 
         # 記得觸發更新
-        self.body.update_transform()
+        # self.body.update()
 
 
 if __name__ == "__main__":
     # 載入設定檔
-    game = MyGame()
+    game = MyGame(tracker=FakeTracker())
     arcade.run()

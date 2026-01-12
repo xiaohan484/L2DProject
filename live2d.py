@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Optional
 import arcade
 import numpy as np
+from mesh_renderer import GridMesh
 
 
 def get_local_matrix(angle, sx, sy, tx, ty):
@@ -75,9 +76,12 @@ class Live2DPart:
         self.world_matrix = np.eye(3)
         self.children = []
         # The visual representation (Composition)
-        self.views = arcade.SpriteList()
-        if view is not None:
+        if isinstance(view, arcade.Sprite):
+            self.views = arcade.SpriteList()
             self.views.append(view)
+        else:
+            self.views = view
+        self.update()
 
     def set_child(self, child: Live2DPart):
         """
@@ -92,7 +96,6 @@ class Live2DPart:
         """
         update Matrix and recursively update children
         """
-        print(add_x, add_y)
         self.local_matrix = get_local_matrix(
             self.angle, self.sx, self.sy, self.x + add_x, self.y + add_y
         )
@@ -104,17 +107,31 @@ class Live2DPart:
         for child in self.children:
             child.update()
 
-    def sync_to_sprite(self):
+    def sync(self):
         """
         The only moment we interact with other coordinate system.
         """
-        self.views[0].center_x = self.world_matrix[0, 2]
-        self.views[0].center_y = self.world_matrix[1, 2]
-        self.views[0].angle = self.angle
+        if isinstance(self.views, arcade.SpriteList):
+            self.views[0].center_x = self.world_matrix[0, 2]
+            self.views[0].center_y = self.world_matrix[1, 2]
+            self.views[0].scale_x = self.sx
+            self.views[0].scale_x = self.sx
+            self.views[0].angle = self.angle
+        else:
+            self.views.center_x = self.world_matrix[0, 2]
+            self.views.center_y = self.world_matrix[1, 2]
+            self.views.scale_x = self.sx
+            self.views.scale_y = self.sy
+            self.views.angle = self.angle
+        print(self.name, self.world_matrix[0, 2], self.world_matrix[1, 2])
 
     def draw(self, **kwargs):
-        self.sync_to_sprite()
-        self.views.draw(**kwargs)
+        if isinstance(self.views, arcade.SpriteList):
+            self.sync()
+            self.views.draw(**kwargs)
+        elif isinstance(self.views, GridMesh):
+            self.sync()
+            self.views.draw()
 
     def get_world_position(self):
         """

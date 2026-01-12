@@ -66,12 +66,13 @@ class GridMesh:
         // 全域變數 (Uniforms)
         uniform vec2 u_pos;     // 網格整體位置
         uniform mat4 u_proj;    // 投影矩陣 (把世界座標轉為螢幕座標)
+        uniform mat4 view_matrix;    // 投影矩陣 (把世界座標轉為螢幕座標)
 
         void main() {
             v_uv = in_uv;
             // 計算最終位置: 原始頂點 + 整體位移
             vec2 final_pos = in_vert + u_pos;
-            gl_Position = u_proj * vec4(final_pos, 0.0, 1.0);
+            gl_Position = u_proj * view_matrix *vec4(final_pos, 0.0, 1.0);
         }
         """
 
@@ -316,9 +317,9 @@ class GridMesh:
         # 3. 綁定資源與渲染
         self.texture.use(0)
         # may be this will false
-        # self.program["u_pos"] = (0, 0)
         self.program["u_pos"] = (self.center_x, self.center_y)
         self.program["u_proj"] = self.ctx.projection_matrix
+        self.program["view_matrix"] = self.ctx.view_matrix
         self.program["u_texture"] = 0
 
         self.geometry.render(self.program)

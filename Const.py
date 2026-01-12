@@ -5,7 +5,7 @@ import json
 # 如果你的原圖是 1216x2236，這裡就填 2236
 MODEL_PATH = "assets/sample_model/processed/"
 CANVAS_HEIGHT = 2236
-GLOBAL_SCALE = 1.5
+GLOBAL_SCALE = 1
 
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
