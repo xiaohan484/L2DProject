@@ -134,6 +134,7 @@ class MyGame(arcade.Window):
     def __del__(self):
         self.tracker.release()
 
+    # todo delete these
     def create_vt_sprite(self, name, parent=None, append=True) -> VTSprite:
         """
         【工廠函數】讀取 JSON 並自動組裝 Sprite
@@ -177,6 +178,7 @@ class MyGame(arcade.Window):
 
         return sprite
 
+    # todo delete these
     def create_mesh(self, name, parent=None, append=True, skin_mesh=False) -> VTSprite:
         """
         【工廠函數】讀取 JSON 並自動組裝 Sprite
@@ -348,7 +350,6 @@ class MyGame(arcade.Window):
         # 代表轉 1 度，像素要移動多少 px
         PARALLAX_X_STRENGTH = -0.4
         PARALLAX_Y_STRENGTH = 0.5
-
         # 3. 計算各層的位移量 (Offset)
         # Layer Depth Multipliers (深度乘數)
         # 前面動得快，後面動得慢
@@ -433,7 +434,7 @@ class MyGame(arcade.Window):
             return
         self.total_time += delta_time
 
-        # self.update_body()
+        self.update_body()
         # self.update_pose(face_info)
         # self.mouth.update_state(face_info)
         # self.eye_pupil_L.update_state(face_info)
@@ -442,7 +443,7 @@ class MyGame(arcade.Window):
         # self.eye_lid_R.update_state(face_info)
 
         # 記得觸發更新
-        # self.body.update()
+        self.body.update()
 
 
 if __name__ == "__main__":

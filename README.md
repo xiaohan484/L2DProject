@@ -22,7 +22,7 @@ Unlike standard solutions that rely on Unity or heavy game engines, my goal is t
 
 WIP Prototype: Real-time eye blinking and eye tracking driven by live facial landmark data. (Note: Actual face input video is not shown for privacy reasons.)
 
-## 🗺️ Roadmap
+## 🗺️ Now what I Doing
 
 <details>
 <summary><strong>Phase 1: Let it moves </strong></summary>
@@ -39,14 +39,14 @@ WIP Prototype: Real-time eye blinking and eye tracking driven by live facial lan
 </details>
 
 <details>
-<summary><strong>Phase 2: Parallax(Current Focus) </strong></summary>
+<summary><strong>Phase 2: Parallax </strong></summary>
 
 - Face Detection (MediaPipe)
     - [x] Head Pose Estimation(Yaw,Pitch)
-    - [ ] Refine Existing Solution more precisely(not x,y only)
-        - [ ] Pupils
-        - [ ] Blinking
-        - [ ] Mouth
+    - [x] Refine Existing Solution more precisely(not x,y only)
+        - [x] Pupils
+        - [x] Blinking
+        - [x] Mouth
 
 - 2D character movement
     - [x] Head rotation
@@ -55,10 +55,20 @@ WIP Prototype: Real-time eye blinking and eye tracking driven by live facial lan
 </details>
 
 <details>
-<summary><strong>Phase 3: Mesh </strong></summary>
+<summary><strong>Phase 3: Refactoring(Current Focus) </strong></summary>
 
-- Face Detection (MediaPipe)
-    - [ ] LandMark Remapping(partial)
+- toDo: 
+    - Make Mouth/Pupils can move in function table implement
+    - Simplify Mesh class, as GPU drawer?
+- Split God class to smaller, single responsibility class(Single Responsibility Principle, SRP)
+- Make dependency injection, cleaner interface for component control
+- Construct Unified Transform System from a part to another part
+- Writing correctly GPU Render code, which let me understand how it does.
+
+</details>
+
+<details>
+<summary><strong>Phase 4: Mesh </strong></summary>
 
 - 2D character movement
     - [ ] Mouth (Mesh)

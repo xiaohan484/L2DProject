@@ -64,15 +64,13 @@ class GridMesh:
         out vec2 v_uv;
         
         // 全域變數 (Uniforms)
-        uniform vec2 u_pos;     // 網格整體位置
+        uniform mat4 u_model;
         uniform mat4 u_proj;    // 投影矩陣 (把世界座標轉為螢幕座標)
         uniform mat4 view_matrix;    // 投影矩陣 (把世界座標轉為螢幕座標)
 
         void main() {
             v_uv = in_uv;
-            // 計算最終位置: 原始頂點 + 整體位移
-            vec2 final_pos = in_vert + u_pos;
-            gl_Position = u_proj * view_matrix *vec4(final_pos, 0.0, 1.0);
+            gl_Position = u_proj * view_matrix *u_model *vec4(in_vert, 0.0, 1.0);
         }
         """
 
@@ -305,27 +303,23 @@ class GridMesh:
         self.current_vertices = data.flatten()
         self.update_buffer()
 
-    def draw(self):
+    def draw(self, world_matrix):
         # 1. 【關鍵修正】開啟混合模式
         # 這行指令告訴 GPU：計算像素時，要考慮 Alpha 通道
-        self.ctx.enable(self.ctx.BLEND)
-
         # 2. 設定混合方程式 (通常 Arcade 預設就是這個，但為了保險起見可以明確指定)
         # source (你的圖) * alpha + destination (背景) * (1 - alpha)
+        self.ctx.enable(self.ctx.BLEND)
         self.ctx.blend_func = self.ctx.BLEND_DEFAULT
 
-        # 3. 綁定資源與渲染
         self.texture.use(0)
-        # may be this will false
-        self.program["u_pos"] = (self.center_x, self.center_y)
+        mat4 = np.eye(4, dtype=np.float32)
+        mat4[0:2, 0:2] = world_matrix[0:2, 0:2]
+        mat4[0:2, 3] = world_matrix[0:2, 2]
+        self.program["u_model"] = mat4.T.flatten()
         self.program["u_proj"] = self.ctx.projection_matrix
         self.program["view_matrix"] = self.ctx.view_matrix
         self.program["u_texture"] = 0
-
         self.geometry.render(self.program)
-
-
-import numpy as np
 
 
 class SkinnedMesh(GridMesh):

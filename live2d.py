@@ -4,6 +4,24 @@ import arcade
 import numpy as np
 from mesh_renderer import GridMesh
 
+PARALLAX_X_STRENGTH = -0.4
+PARALLAX_Y_STRENGTH = 0.5
+
+OFFSET_FRONT = 1.0001  # 前髮、五官
+OFFSET_MID = 1.0  # 臉型
+OFFSET_BACK = 0.9999  # 後髮
+OFFSET_FRONT_SHADOW = 0.5
+
+parallax_coef = {
+    -1: (PARALLAX_X_STRENGTH * OFFSET_BACK, PARALLAX_Y_STRENGTH * OFFSET_BACK),
+    1: (PARALLAX_X_STRENGTH * OFFSET_MID, PARALLAX_Y_STRENGTH * OFFSET_MID),
+    2: (
+        PARALLAX_X_STRENGTH * OFFSET_FRONT_SHADOW,
+        PARALLAX_Y_STRENGTH * OFFSET_FRONT_SHADOW,
+    ),
+    3: (PARALLAX_X_STRENGTH * OFFSET_FRONT, PARALLAX_Y_STRENGTH * OFFSET_FRONT),
+}
+
 
 def get_local_matrix(angle, sx, sy, tx, ty):
     rad = np.radians(angle)
@@ -117,21 +135,19 @@ class Live2DPart:
             self.views[0].scale_x = self.sx
             self.views[0].scale_x = self.sx
             self.views[0].angle = self.angle
-        else:
-            self.views.center_x = self.world_matrix[0, 2]
-            self.views.center_y = self.world_matrix[1, 2]
-            self.views.scale_x = self.sx
-            self.views.scale_y = self.sy
-            self.views.angle = self.angle
-        print(self.name, self.world_matrix[0, 2], self.world_matrix[1, 2])
+            # self.views.draw(self.world_matrix)
+            # self.views.center_x = self.world_matrix[0, 2]
+            # self.views.center_y = self.world_matrix[1, 2]
+            # self.views.scale_x = self.sx
+            # self.views.scale_y = self.sy
+            # self.views.angle = self.angle
 
     def draw(self, **kwargs):
         if isinstance(self.views, arcade.SpriteList):
             self.sync()
             self.views.draw(**kwargs)
         elif isinstance(self.views, GridMesh):
-            self.sync()
-            self.views.draw()
+            self.views.draw(self.world_matrix)
 
     def get_world_position(self):
         """
