@@ -42,15 +42,13 @@ class GridMesh:
         data_key=None,
     ):
         self.ctx = context
-
         # 1. 載入紋理
         self.state_textures = {}
         for state, texture_paths in texture_paths.items():
             self.state_textures[state] = self.ctx.load_texture(texture_paths)
+        self.geometry = {}
         print(self.state_textures)
         self.current_state, self.texture = next(iter(self.state_textures.items()))
-        self.width = self.texture.width * scale
-        self.height = self.texture.height * scale
 
         # 網格密度 (Cols, Rows)
         self.cols, self.rows = grid_size
@@ -99,7 +97,8 @@ class GridMesh:
         )
 
         # 3. 生成網格資料 (Vertices & Indices)
-        self.setup_mesh_data()
+        for state, texture in self.state_textures.items():
+            self.setup_mesh_data(state, texture.width, texture.height)
 
         self.parent = parent
         self.children = []
@@ -163,7 +162,7 @@ class GridMesh:
         for child in self.children:
             child.update_transform()
 
-    def setup_mesh_data(self):
+    def setup_mesh_data(self, name, width, height):
         """
         生成 N x M 的網格頂點數據
         Data Layout: [x, y, u, v, x, y, u, v, ...]
@@ -173,10 +172,10 @@ class GridMesh:
 
         # 步驟 A: 生成頂點 (Vertices)
         # 我們把圖片中心設為 (0, 0)，方便之後旋轉
-        start_x = -self.width / 2
-        start_y = -self.height / 2
-        step_x = self.width / self.cols
-        step_y = self.height / self.rows
+        start_x = -width / 2
+        start_y = -height / 2
+        step_x = width / self.cols
+        step_y = height / self.rows
 
         for r in range(self.rows + 1):
             for c in range(self.cols + 1):
@@ -221,7 +220,7 @@ class GridMesh:
         self.vbo = self.ctx.buffer(data=array("f", self.current_vertices))
 
         # 定義 Geometry 物件
-        self.geometry = self.ctx.geometry(
+        self.geometry[name] = self.ctx.geometry(
             [arcade.gl.BufferDescription(self.vbo, "2f 2f", ["in_vert", "in_uv"])],
             index_buffer=self.ibo,
             mode=self.ctx.TRIANGLES,
@@ -323,7 +322,7 @@ class GridMesh:
         self.program["u_proj"] = self.ctx.projection_matrix
         self.program["view_matrix"] = self.ctx.view_matrix
         self.program["u_texture"] = 0
-        self.geometry.render(self.program)
+        self.geometry[self.current_state].render(self.program)
 
 
 class SkinnedMesh(GridMesh):
