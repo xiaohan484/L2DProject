@@ -4,24 +4,6 @@ import arcade
 import numpy as np
 from mesh_renderer import GridMesh
 
-PARALLAX_X_STRENGTH = -0.4
-PARALLAX_Y_STRENGTH = 0.5
-
-OFFSET_FRONT = 1.0001  # 前髮、五官
-OFFSET_MID = 1.0  # 臉型
-OFFSET_BACK = 0.9999  # 後髮
-OFFSET_FRONT_SHADOW = 0.5
-
-parallax_coef = {
-    -1: (PARALLAX_X_STRENGTH * OFFSET_BACK, PARALLAX_Y_STRENGTH * OFFSET_BACK),
-    1: (PARALLAX_X_STRENGTH * OFFSET_MID, PARALLAX_Y_STRENGTH * OFFSET_MID),
-    2: (
-        PARALLAX_X_STRENGTH * OFFSET_FRONT_SHADOW,
-        PARALLAX_Y_STRENGTH * OFFSET_FRONT_SHADOW,
-    ),
-    3: (PARALLAX_X_STRENGTH * OFFSET_FRONT, PARALLAX_Y_STRENGTH * OFFSET_FRONT),
-}
-
 
 def get_local_matrix(angle, sx, sy, tx, ty):
     rad = np.radians(angle)
@@ -77,6 +59,7 @@ class Live2DPart:
         scale_x: float = 1,
         scale_y: float = 1,
         view=None,
+        response=None,
     ):
         self.name = name
         # Local space properties
@@ -88,6 +71,7 @@ class Live2DPart:
         self.x = x
         self.y = y
         self.parent = parent
+        self.response = response
         if parent:
             parent.set_child(self)
         self.local_matrix = np.eye(3)
@@ -99,6 +83,10 @@ class Live2DPart:
             self.views.append(view)
         else:
             self.views = view
+
+        self.add_x = 0
+        self.add_y = 0
+        self.add_angle = 0
         self.update()
 
     def set_child(self, child: Live2DPart):
@@ -110,12 +98,17 @@ class Live2DPart:
         self.children.append(child)
         return
 
-    def update(self, add_x=0, add_y=0):
+    def update(self, data=None):
         """
         update Matrix and recursively update children
         """
+        # self.response()
+        skip = data is None or self.response is None
+        if skip is False:
+            self.response(self, data)
+
         self.local_matrix = get_local_matrix(
-            self.angle, self.sx, self.sy, self.x + add_x, self.y + add_y
+            self.angle, self.sx, self.sy, self.x + self.add_x, self.y + self.add_y
         )
         if self.parent:
             self.world_matrix = self.parent.world_matrix @ self.local_matrix
@@ -123,7 +116,7 @@ class Live2DPart:
             self.world_matrix = self.local_matrix
 
         for child in self.children:
-            child.update()
+            child.update(data)
 
     def sync(self):
         """

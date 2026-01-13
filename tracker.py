@@ -432,12 +432,14 @@ class FakeTracker:
     def _update_loop(self):
         """這是背景執行緒在做的事：不斷更新數據"""
         while self.running:
+            t = time.time()
+            seed = np.sin(t)
             pub.sendMessage(
                 "FaceInfo",
                 face_info={
-                    "PupilsPos": (0, 0),
+                    "PupilsPos": (-seed, 0.5 * seed),
                     "Blinking": (1, 1),
-                    "MouthOpenness": 0,
+                    "MouthOpenness": seed,
                     "Pose": (0, 0, 0),
                 },
             )

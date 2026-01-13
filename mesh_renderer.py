@@ -35,7 +35,7 @@ class GridMesh:
     def __init__(
         self,
         context: arcade.context,
-        texture_path: str,
+        texture_paths,
         grid_size=(100, 100),
         scale=1.0,
         parent=None,
@@ -44,7 +44,11 @@ class GridMesh:
         self.ctx = context
 
         # 1. 載入紋理
-        self.texture = self.ctx.load_texture(texture_path)
+        self.state_textures = {}
+        for state, texture_paths in texture_paths.items():
+            self.state_textures[state] = self.ctx.load_texture(texture_paths)
+        print(self.state_textures)
+        self.current_state, self.texture = next(iter(self.state_textures.items()))
         self.width = self.texture.width * scale
         self.height = self.texture.height * scale
 

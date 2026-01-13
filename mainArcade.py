@@ -12,26 +12,32 @@ from bone_system import load_bones
 import time
 import numpy as np
 from live2d import Live2DPart
+from response import *
 
 mode_mesh = 0
 mode_sprite = 1
 
 
-def load_local_position(global_pos, parent_global_pos, global_scale):
-    # Calculate the relative distance in global space
-    delta_x = global_pos[0] - parent_global_pos[0]
-    delta_y = global_pos[1] - parent_global_pos[1]
-
-    # Scale down the delta to get the original local position
-    local_x = delta_x / global_scale
-    local_y = delta_y / global_scale
-
-    return local_x, local_y
+func_table = {
+    "Body": body_response,
+    "EyePupilL": pupils_response,
+    "EyePupilR": pupils_response,
+    "Mouth": mouth_response,
+}
 
 
 def create_live2dpart(ctx, name, mode, parent=None):
+    if name in func_table:
+        res = func_table[name]
+    else:
+        res = None
     data = MODEL_DATA[name]
-    filepath = os.path.join("assets/sample_model/processed", data["filename"])
+    textures = {}
+    for path in data["filename"]:
+        filepath = os.path.join("assets/sample_model/processed", path)
+        p = path.removesuffix(".png")
+        textures[p] = filepath
+
     raw_global_x = data["global_center_x"]
     raw_global_y = data["global_center_y"]
     if mode == mode_sprite:
@@ -39,7 +45,7 @@ def create_live2dpart(ctx, name, mode, parent=None):
     elif mode == mode_mesh:
         view = GridMesh(
             ctx,
-            filepath,
+            textures,
             grid_size=(10, 10),
             scale=GLOBAL_SCALE,
             parent=None,
@@ -58,6 +64,7 @@ def create_live2dpart(ctx, name, mode, parent=None):
             scale_y=GLOBAL_SCALE,
             angle=0,
             view=view,
+            response=res,
         )
     else:
         parent_global = (
@@ -78,29 +85,20 @@ def create_live2dpart(ctx, name, mode, parent=None):
             scale_y=GLOBAL_SCALE,
             angle=0,
             view=view,
+            response=res,
         )
 
 
-def initial_coor(sprite, data):
-    raw_global_x = data["global_center_x"]
-    raw_global_y = data["global_center_y"]
-    if sprite.parent:
-        base_x = raw_global_x - sprite.parent.initial_global_x
-        base_y = raw_global_y - sprite.parent.initial_global_y
-        sprite.base_local_x = base_x
-        sprite.base_local_y = base_y
-        sprite.local_x = base_x
-        sprite.local_y = base_y
-        sprite.initial_global_x = raw_global_x
-        sprite.initial_global_y = raw_global_yal_y = raw_global_y
-    else:
-        sprite.base_local_x = 0
-        sprite.base_local_y = 0 - 950 * GLOBAL_SCALE  # 試著改成 +50 或 -50 看看效果
-        sprite.center_x = sprite.base_local_x
-        sprite.center_y = sprite.base_local_y
-        # 記錄初始絕對座標 (這兩行不變)
-        sprite.initial_global_x = raw_global_x
-        sprite.initial_global_y = raw_global_yal_y = raw_global_y
+def load_local_position(global_pos, parent_global_pos, global_scale):
+    # Calculate the relative distance in global space
+    delta_x = global_pos[0] - parent_global_pos[0]
+    delta_y = global_pos[1] - parent_global_pos[1]
+
+    # Scale down the delta to get the original local position
+    local_x = delta_x / global_scale
+    local_y = delta_y / global_scale
+
+    return local_x, local_y
 
 
 class MyGame(arcade.Window):
@@ -133,87 +131,6 @@ class MyGame(arcade.Window):
 
     def __del__(self):
         self.tracker.release()
-
-    # todo delete these
-    def create_vt_sprite(self, name, parent=None, append=True) -> VTSprite:
-        """
-        【工廠函數】讀取 JSON 並自動組裝 Sprite
-        name: 對應 JSON 裡的 key (例如 'face', 'eye_lash_L')
-        parent: 父物件 Sprite
-        """
-        if name not in MODEL_DATA:
-            print(f"⚠️ 警告: JSON 裡找不到 '{name}'")
-            return arcade.Sprite()  # 回傳空物件避免當機
-
-        data = MODEL_DATA[name]
-        filepath = os.path.join("assets/sample_model/processed", data["filename"])
-        # 1. 建立 Sprite
-        if name == "Mouth":
-            data = MODEL_DATA["MouthClose"]
-            prefix = "assets/sample_model/processed/"
-            sprite = MouthSprite(
-                closed_path=prefix + "MouthClose.png",
-                half_path=prefix + "MouthHalf.png",
-                open_path=prefix + "MouthOpen.png",
-                scale=GLOBAL_SCALE,
-                parent=parent,
-                data_key=name,
-            )  # scale 可全域調整
-        elif "Pupil" in name:
-            sprite = PupilsSprite(
-                filepath, scale=GLOBAL_SCALE, parent=parent, data_key=name
-            )  # scale 可全域調整
-        elif "Lid" in name:
-            sprite = LidSprite(
-                filepath, scale=GLOBAL_SCALE, parent=parent, data_key=name
-            )  # scale 可全域調整
-        else:
-            sprite = VTSprite(
-                filepath, scale=GLOBAL_SCALE, parent=parent, data_key=name
-            )  # scale 可全域調整
-        initial_coor(sprite, data)
-        # 4. 計算 Local Position (相對位置)
-        if append:
-            self.all_sprites.append(sprite)
-
-        return sprite
-
-    # todo delete these
-    def create_mesh(self, name, parent=None, append=True, skin_mesh=False) -> VTSprite:
-        """
-        【工廠函數】讀取 JSON 並自動組裝 Sprite
-        name: 對應 JSON 裡的 key (例如 'face', 'eye_lash_L')
-        parent: 父物件 Sprite
-        """
-        assert name in MODEL_DATA, f"⚠️ 警告: JSON 裡找不到 '{name}'"
-        data = MODEL_DATA[name]
-        filepath = os.path.join("assets/sample_model/processed", data["filename"])
-        # 1. 建立 Sprite
-        if skin_mesh:
-            if self.hair_bones is None:
-                self.hair_bones = load_bones(
-                    "assets/sample_model/processed/FrontHairLeft.json"
-                )
-            mesh = SkinnedMesh(
-                self.ctx,
-                filepath,
-                grid_size=(10, 10),
-                scale=GLOBAL_SCALE,
-                parent=parent,
-                data_key=data,  # 10x10 的格子
-                bones=self.hair_bones,
-            )
-        else:
-            mesh = GridMesh(
-                self.ctx,
-                filepath,
-                grid_size=(10, 10),
-                scale=GLOBAL_SCALE,
-                parent=parent,
-                data_key=data,  # 10x10 的格子
-            )
-        initial_coor(mesh, data)
-        return mesh
 
     def create_live2dpart(self, name, parent=None):
         return create_live2dpart(self.ctx, name, mode_mesh, parent)
@@ -357,7 +274,6 @@ class MyGame(arcade.Window):
         OFFSET_MID = 1.0  # 臉型
         OFFSET_BACK = 0.9999  # 後髮
         OFFSET_FRONT_SHADOW = 0.5
-
         # 計算 X 軸位移
         move_x_front_shadow = yaw * PARALLAX_X_STRENGTH * OFFSET_FRONT_SHADOW
         move_x_front = yaw * PARALLAX_X_STRENGTH * OFFSET_FRONT
@@ -376,56 +292,56 @@ class MyGame(arcade.Window):
         face_info["FaceBaseOffset"] = (move_x_mid, move_y_mid)
         face_info["BackHairOffset"] = (move_x_back, move_y_back)
 
-        self.face_landmarks.update(move_x_front, move_y_front)
+        # self.face_landmarks.update(move_x_front, move_y_front)
 
-        for group, sprites in self.groups.items():
-            add_x, add_y = face_info[group + "Offset"]
-            for s in sprites:
-                s.local_x = s.base_local_x + add_x
-                s.local_y = s.base_local_y + add_y
-        self.body.local_x = self.body.base_local_x + move_x_back
-        self.body.local_y = self.body.base_local_y - move_y_back
+        # for group, sprites in self.groups.items():
+        #    add_x, add_y = face_info[group + "Offset"]
+        #    for s in sprites:
+        #        s.local_x = s.base_local_x + add_x
+        #        s.local_y = s.base_local_y + add_y
+        # self.body.local_x = self.body.base_local_x + move_x_back
+        # self.body.local_y = self.body.base_local_y - move_y_back
 
-        # front hair physics
-        yaw_velocity = yaw - self.last_yaw
+        ## front hair physics
+        # yaw_velocity = yaw - self.last_yaw
 
-        # RD 技巧：限制最大速度 (Clamp)，避免追蹤丟失瞬間頭部瞬移導致頭髮爆炸
-        yaw_velocity = max(-5.0, min(yaw_velocity, 5.0))
+        ## RD 技巧：限制最大速度 (Clamp)，避免追蹤丟失瞬間頭部瞬移導致頭髮爆炸
+        # yaw_velocity = max(-5.0, min(yaw_velocity, 5.0))
 
-        self.last_yaw = yaw
-        # 3. 更新物理系統
-        # 這裡的 scaling_factor 很重要，用來把「角度差」轉換成「彎曲力道」
-        # 負號是因為慣性方向相反 (頭向左，髮尾甩向右)
-        force = -yaw_velocity * 0.01
-        bend_val, _ = self.hair_physics.update(force)
-        # 4. 驅動網格
-        for front_hair in [
-            self.hair_middle_mesh,
-            self.hair_right_mesh,
-            self.hair_front_middle_shadow_mesh,
-            self.hair_front_right_shadow_mesh,
-        ]:
-            front_hair.apply_bend(bend_val, self.total_time)
-        self.back_hair_mesh.apply_bend(-bend_val * 0.2, self.total_time)
+        # self.last_yaw = yaw
+        ## 3. 更新物理系統
+        ## 這裡的 scaling_factor 很重要，用來把「角度差」轉換成「彎曲力道」
+        ## 負號是因為慣性方向相反 (頭向左，髮尾甩向右)
+        # force = -yaw_velocity * 0.01
+        # bend_val, _ = self.hair_physics.update(force)
+        ## 4. 驅動網格
+        # for front_hair in [
+        #    self.hair_middle_mesh,
+        #    self.hair_right_mesh,
+        #    self.hair_front_middle_shadow_mesh,
+        #    self.hair_front_right_shadow_mesh,
+        # ]:
+        #    front_hair.apply_bend(bend_val, self.total_time)
+        # self.back_hair_mesh.apply_bend(-bend_val * 0.2, self.total_time)
 
-        # pendulum
-        head_angle = self.hair_bones[1].angle
-        gravity_target = head_angle * self.hair_physics_pendulum.gravity_power
-        final_angle = self.hair_physics_pendulum.update(
-            target_angle_offset=gravity_target, input_force=force
-        )
-        gain = 1.1
-        for i, b in enumerate(self.hair_bones):
-            if i == 0:
-                b.angle = 0
-            elif i == 1:
-                b.angle = head_angle + (-5 * final_angle) * 0.1
-            else:
-                b.angle = -5 * final_angle * gain
-                gain *= 1.1
-        self.hair_bones[0].update()
-        self.hair_left_mesh.update_skinning()
-        self.hair_front_left_shadow_mesh.update_skinning()
+        ## pendulum
+        # head_angle = self.hair_bones[1].angle
+        # gravity_target = head_angle * self.hair_physics_pendulum.gravity_power
+        # final_angle = self.hair_physics_pendulum.update(
+        #    target_angle_offset=gravity_target, input_force=force
+        # )
+        # gain = 1.1
+        # for i, b in enumerate(self.hair_bones):
+        #    if i == 0:
+        #        b.angle = 0
+        #    elif i == 1:
+        #        b.angle = head_angle + (-5 * final_angle) * 0.1
+        #    else:
+        #        b.angle = -5 * final_angle * gain
+        #        gain *= 1.1
+        # self.hair_bones[0].update()
+        # self.hair_left_mesh.update_skinning()
+        # self.hair_front_left_shadow_mesh.update_skinning()
 
     def on_update(self, delta_time):
         with self.lock:
@@ -434,7 +350,7 @@ class MyGame(arcade.Window):
             return
         self.total_time += delta_time
 
-        self.update_body()
+        # self.update_body()
         # self.update_pose(face_info)
         # self.mouth.update_state(face_info)
         # self.eye_pupil_L.update_state(face_info)
@@ -443,7 +359,8 @@ class MyGame(arcade.Window):
         # self.eye_lid_R.update_state(face_info)
 
         # 記得觸發更新
-        self.body.update()
+        self.update_pose(face_info)
+        self.body.update(face_info)
 
 
 if __name__ == "__main__":

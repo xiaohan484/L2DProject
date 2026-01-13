@@ -1,6 +1,6 @@
 {
   "EyeBrowL": {
-    "filename": "EyeBrowL.png",
+    "filename":[ "EyeBrowL.png"],
     "original_width": 69,
     "original_height": 22,
     "global_center_x": 573,
@@ -9,7 +9,7 @@
     "anchor_y": 0.3636
   },
   "EyeBrowR": {
-    "filename": "EyeBrowR.png",
+    "filename":[ "EyeBrowR.png"],
     "original_width": 69,
     "original_height": 26,
     "global_center_x": 679,
@@ -18,7 +18,7 @@
     "anchor_y": 0.3077
   },
   "EyeLashL": {
-    "filename": "EyeLashL.png",
+    "filename":[ "EyeLashL.png"],
     "original_width": 74,
     "original_height": 24,
     "global_center_x": 567,
@@ -27,7 +27,7 @@
     "anchor_y": 0.0833
   },
   "EyeLashLClose": {
-    "filename": "EyeLashLClose.png",
+    "filename":[ "EyeLashLClose.png"],
     "original_width": 68,
     "original_height": 16,
     "global_center_x": 572,
@@ -36,7 +36,7 @@
     "anchor_y": 0.75
   },
   "EyeLashRClose": {
-    "filename": "EyeLashRClose.png",
+    "filename":[ "EyeLashRClose.png"],
     "original_width": 65,
     "original_height": 16,
     "global_center_x": 675,
@@ -45,7 +45,7 @@
     "anchor_y": 0.8125
   },
   "EyePupilL": {
-    "filename": "EyePupilL.png",
+    "filename":[ "EyePupilL.png"],
     "original_width": 30,
     "original_height": 35,
     "global_center_x": 575,
@@ -54,7 +54,7 @@
     "anchor_y": 0.6
   },
   "EyePupilR": {
-    "filename": "EyePupilR.png",
+    "filename":[ "EyePupilR.png"],
     "original_width": 31,
     "original_height": 32,
     "global_center_x": 675,
@@ -63,7 +63,7 @@
     "anchor_y": 0.5312
   },
   "EyeWhiteL": {
-    "filename": "EyeWhiteL.png",
+    "filename":[ "EyeWhiteL.png"],
     "original_width": 58,
     "original_height": 31,
     "global_center_x": 568,
@@ -72,7 +72,7 @@
     "anchor_y": 0.4516
   },
   "EyeWhiteR": {
-    "filename": "EyeWhiteR.png",
+    "filename":[ "EyeWhiteR.png"],
     "original_width": 62,
     "original_height": 46,
     "global_center_x": 677,
@@ -81,7 +81,7 @@
     "anchor_y": 0.2826
   },
   "Face": {
-    "filename": "Face.png",
+    "filename":[ "Face.png"],
     "original_width": 230,
     "original_height": 404,
     "global_center_x": 621,
@@ -90,7 +90,7 @@
     "anchor_y": 0.5
   },
   "HairFront": {
-    "filename": "HairFront.png",
+    "filename":[ "HairFront.png"],
     "original_width": 237,
     "original_height": 437,
     "global_center_x": 624,
@@ -99,7 +99,7 @@
     "anchor_y": 0.6911
   },
   "EyeLashR": {
-    "filename": "EyeLashR.png",
+    "filename":[ "EyeLashR.png"],
     "original_width": 69,
     "original_height": 28,
     "global_center_x": 681,
@@ -108,7 +108,7 @@
     "anchor_y": 0.3571
   },
   "Body": {
-    "filename": "Body.png",
+    "filename":[ "Body.png"],
     "original_width": 1161,
     "original_height": 1793,
     "global_center_x": 626,
@@ -117,7 +117,7 @@
     "anchor_y": 0.5
   },
   "EyeLidR": {
-    "filename": "EyeLidR.png",
+    "filename":[ "EyeLidR.png"],
     "original_width": 78,
     "original_height": 73,
     "global_center_x": 674,
@@ -126,7 +126,7 @@
     "anchor_y": 0.5
   },
   "EyeLidL": {
-    "filename": "EyeLidL.png",
+    "filename":[ "EyeLidL.png"],
     "original_width": 73,
     "original_height": 74,
     "global_center_x": 572,
@@ -135,7 +135,7 @@
     "anchor_y": 0.5
   },
   "BackHair": {
-    "filename": "BackHair.png",
+    "filename":[ "BackHair.png"],
     "original_width": 330,
     "original_height": 435,
     "global_center_x": 626,
@@ -144,7 +144,7 @@
     "anchor_y": 0.5
   },
   "FaceLandmark": {
-    "filename": "FaceLandmark.png",
+    "filename":[ "FaceLandmark.png"],
     "original_width": 139,
     "original_height": 45,
     "global_center_x": 624,
@@ -153,7 +153,7 @@
     "anchor_y": 0.5
   },
   "Mouth": {
-    "filename": "MouthClose.png",
+    "filename": ["MouthClose.png","MouthOpen.png","MouthHalf.png"],
     "original_width": 52,
     "original_height": 27,
     "global_center_x": 627,
@@ -162,7 +162,7 @@
     "anchor_y": 0.5
   },
   "MouthClose": {
-    "filename": "MouthClose.png",
+    "filename":[ "MouthClose.png"],
     "original_width": 52,
     "original_height": 27,
     "global_center_x": 627,
@@ -171,7 +171,7 @@
     "anchor_y": 0.5
   },
   "MouthHalf": {
-    "filename": "MouthHalf.png",
+    "filename":[ "MouthHalf.png"],
     "original_width": 52,
     "original_height": 33,
     "global_center_x": 625,
@@ -180,7 +180,7 @@
     "anchor_y": 0.5
   },
   "MouthOpen": {
-    "filename": "MouthOpen.png",
+    "filename":[ "MouthOpen.png"],
     "original_width": 63,
     "original_height": 52,
     "global_center_x": 625,
@@ -189,7 +189,7 @@
     "anchor_y": 0.5
   },
   "FrontHairShadow": {
-    "filename": "FrontHairShadow.png",
+    "filename":[ "FrontHairShadow.png"],
     "original_width": 228,
     "original_height": 439,
     "global_center_x": 624,
@@ -198,7 +198,7 @@
     "anchor_y": 0.5
   },
   "FrontHairLeft": {
-    "filename": "FrontHairLeft.png",
+    "filename":[ "FrontHairLeft.png"],
     "original_width": 77,
     "original_height": 419,
     "global_center_x": 544,
@@ -207,7 +207,7 @@
     "anchor_y": 0.5
   },
   "FrontHairMiddle": {
-    "filename": "FrontHairMiddle.png",
+    "filename":[ "FrontHairMiddle.png"],
     "original_width": 225,
     "original_height": 178,
     "global_center_x": 623,
@@ -216,7 +216,7 @@
     "anchor_y": 0.5
   },
   "FrontHairRight": {
-    "filename": "FrontHairRight.png",
+    "filename":[ "FrontHairRight.png"],
     "original_width": 70,
     "original_height": 425,
     "global_center_x": 708,
@@ -225,7 +225,7 @@
     "anchor_y": 0.5
   },
   "FrontHairShadowLeft": {
-    "filename": "FrontHairShadowLeft.png",
+    "filename":[ "FrontHairShadowLeft.png"],
     "original_width": 71,
     "original_height": 429,
     "global_center_x": 545,
@@ -234,7 +234,7 @@
     "anchor_y": 0.5
   },
   "FrontHairShadowMiddle": {
-    "filename": "FrontHairShadowMiddle.png",
+    "filename":[ "FrontHairShadowMiddle.png"],
     "original_width": 164,
     "original_height": 179,
     "global_center_x": 626,
@@ -243,7 +243,7 @@
     "anchor_y": 0.5
   },
   "FrontHairShadowRight": {
-    "filename": "FrontHairShadowRight.png",
+    "filename":[ "FrontHairShadowRight.png"],
     "original_width": 69,
     "original_height": 420,
     "global_center_x": 703,
