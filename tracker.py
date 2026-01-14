@@ -438,7 +438,7 @@ class FakeTracker:
                 "FaceInfo",
                 face_info={
                     "PupilsPos": (-seed, 0.5 * seed),
-                    "Blinking": (1, 1),
+                    "Blinking": (seed, seed),
                     "MouthOpenness": seed,
                     "Pose": (0, 0, 0),
                 },

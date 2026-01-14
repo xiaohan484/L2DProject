@@ -55,6 +55,7 @@ class Live2DPart:
         parent: Optional[Live2DPart] = None,
         x: float = 0,
         y: float = 0,
+        z: int = 0,
         angle: float = 0,
         scale_x: float = 1,
         scale_y: float = 1,
@@ -63,7 +64,7 @@ class Live2DPart:
     ):
         self.name = name
         # Local space properties
-        self.z_depth = 1.0  # For parallax
+        self.z_depth = z  # For parallax
 
         self.angle = angle
         self.sx = scale_x

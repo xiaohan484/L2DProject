@@ -1,10 +1,23 @@
 import math
 import time
 from Const import GLOBAL_SCALE
+from functools import partial
 
 
 def is_blinking(bl, br):
     return bl < 0.25 or br < 0.25
+
+
+def block_blinking(blink):
+    return blink < EAR_MIN
+
+
+def get_blink(dir, data):
+    blinkL, blinkR = data["Blinking"]
+    if dir == "L":
+        return blinkL
+    else:
+        return blinkR
 
 
 def body_response(live, data):
@@ -28,7 +41,7 @@ last_valid_eye_x = 0
 last_valid_eye_y = 0
 
 
-def pupils_response(live, data):
+def pupils_response(dir, live, data):
     bl, br = data["Blinking"]
     calibration = (0, 0)
 
@@ -55,7 +68,15 @@ def pupils_response(live, data):
     add_x, add_y = data["FaceBaseOffset"]
     live.add_x = x + add_x
     live.add_y = y + add_y
+    if block_blinking(get_blink(dir, data)):
+        live.sx = 0
+    else:
+        live.sx = 1
     return
+
+
+pupils_response_l = partial(pupils_response, "L")
+pupils_response_r = partial(pupils_response, "R")
 
 
 def mouth_response(live, data):
@@ -63,10 +84,10 @@ def mouth_response(live, data):
     # Simple threshold logic (Logic Step 2)
     if openness < 0.1:
         new_state = "MouthClose"
-    elif openness < 0.3:
-        new_state = "MouthOpen"
-    else:
+    elif openness < 0.5:
         new_state = "MouthHalf"
+    else:
+        new_state = "MouthOpen"
 
     # Only swap texture if the state actually changed (Optimization)
     views = live.views
@@ -74,3 +95,52 @@ def mouth_response(live, data):
         views.texture = views.state_textures[new_state]
         views.current_state = new_state
     return
+
+
+from Const import *
+from ValueUtils import map_range
+
+
+def lid_response(dir, live, data):
+    blinkL, blinkR = data["Blinking"]
+    if dir == "L":
+        blink = blinkL
+    else:
+        blink = blinkR
+    # blink = self.filter_blink(current_time, blinkL)
+    # update local
+    target_y = -map_range(blink, EAR_MIN, EAR_MAX, EYE_CLOSED_Y, EYE_OPEN_Y)
+    # self.local_x = self.base_local_x
+    live.add_y = target_y
+    close_progress = map_range(blink, EAR_MIN, EAR_MAX, 1.0, 0.0)
+    # live.sy = 1.0 - (close_progress * 0.4)
+    data[f"EyeLashClose{dir}"] = target_y
+    data[f"EyeLashScale{dir}"] = 1.0 - (close_progress * 0.4)
+    return
+
+
+lid_response_l = partial(lid_response, "L")
+lid_response_r = partial(lid_response, "R")
+
+
+def lash_response(dir, live, data):
+    live.add_y = data[f"EyeLashClose{dir}"]
+    if block_blinking(get_blink(dir, data)):
+        live.sy = -data[f"EyeLashScale{dir}"]
+    else:
+        live.sy = data[f"EyeLashScale{dir}"]
+
+
+lash_response_l = partial(lash_response, "L")
+lash_response_r = partial(lash_response, "R")
+
+
+def white_response(dir, live, data):
+    if block_blinking(get_blink(dir, data)):
+        live.sy = 0
+    else:
+        live.sy = 1
+
+
+white_response_l = partial(white_response, "L")
+white_response_r = partial(white_response, "R")
