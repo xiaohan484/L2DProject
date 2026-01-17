@@ -12,6 +12,9 @@ dependencies = [
     "protobuf<4",
     "pygame>=2.6.1",
     "pypubsub>=4.0.7",
+    "scipy>=1.15.3",
+    "shapely>=2.1.2",
+    "triangle>=20250106",
 ]
 
 [tool.black]
