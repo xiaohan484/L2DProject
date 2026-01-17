@@ -1,5 +1,3 @@
-import json
-import math
 import os
 import threading
 from Const import *
@@ -7,51 +5,62 @@ from VTSprite import *
 import arcade
 from tracker import AsyncFaceTracker, FakeTracker
 from ValueUtils import *
-from mesh_renderer import GridMesh, SkinnedMesh, lerp_apply
+from mesh_renderer import GridMesh
 from bone_system import load_bones
-import time
 import numpy as np
-from live2d import Live2DPart
+from live2d import (
+    Live2DPart,
+    back_hair_z,
+    face_base_z,
+    face_feature_z,
+    front_shadow_z,
+    body_base_z,
+)
 from response import *
+from collections import OrderedDict
 
 mode_mesh = 0
 mode_sprite = 1
 
 
-front_shadow_z = 2
-face_feature_z = 1
-face_base_z = 0
-back_hair_z = -1
-
-func_table = {
-    "Body": (0, body_response),
-    "BackHair": (back_hair_z, None),
-    "Face": (face_base_z, None),
-    "FaceLandmark": (face_feature_z, None),
-    "EyeLidL": (face_feature_z, lid_response_l),
-    "EyeLidR": (face_feature_z, lid_response_r),
-    "EyeWhiteL": (face_feature_z, white_response_l),
-    "EyeWhiteR": (face_feature_z, white_response_r),
-    "EyePupilL": (face_feature_z, pupils_response_l),
-    "EyePupilR": (face_feature_z, pupils_response_r),
-    "EyeLashL": (face_feature_z, lash_response_l),
-    "EyeLashR": (face_feature_z, lash_response_r),
-    "EyeBrowL": (face_feature_z, None),
-    "EyeBrowR": (face_feature_z, None),
-    "Mouth": (face_feature_z, mouth_response),
-    "FrontHairLeft": (face_feature_z, None),
-    "FrontHairMiddle": (face_feature_z, None),
-    "FrontHairLeftShadow": (front_shadow_z, None),
-    "FrontHairMiddleShadow": (front_shadow_z, None),
-}
+func_table = OrderedDict(
+    {
+        "Body": (body_base_z, body_response, None),
+        "BackHair": (back_hair_z, None, "Body"),
+        "Face": (face_base_z, None, "Body"),
+        "FaceLandmark": (face_feature_z, None, "Face"),
+        "EyeWhiteL": (face_feature_z, white_response_l, "Face"),
+        "EyeWhiteR": (face_feature_z, white_response_r, "Face"),
+        "EyePupilL": (face_feature_z, pupils_response_l, "Face"),
+        "EyePupilR": (face_feature_z, pupils_response_r, "Face"),
+        "EyeLidL": (face_feature_z, lid_response_l, "Face"),
+        "EyeLidR": (face_feature_z, lid_response_r, "Face"),
+        "EyeLashL": (face_feature_z, lash_response_l, "Face"),
+        "EyeLashR": (face_feature_z, lash_response_r, "Face"),
+        "EyeBrowL": (face_feature_z, None, "Face"),
+        "EyeBrowR": (face_feature_z, None, "Face"),
+        "Mouth": (face_feature_z, mouth_response, "Face"),
+        "FrontHairShadowLeft": (front_shadow_z, None, "Face"),
+        "FrontHairShadowMiddle": (front_shadow_z, None, "Face"),
+        "FrontHairLeft": (face_feature_z, None, "Face"),
+        "FrontHairMiddle": (face_feature_z, None, "Face"),
+    }
+)
 
 
-def create_live2dpart(ctx, name, mode, parent=None):
-    if name in func_table:
-        z, res = func_table[name]
-    else:
-        res = None
-        z = None
+def create_live2dpart(ctx):
+    lives = OrderedDict({})
+    for name, (_, _, parent) in func_table.items():
+        if parent is not None:
+            parent = lives[parent]
+        lives[name] = create_live2dpart_each(ctx, name, parent)
+    root = lives["Body"]
+    lives.move_to_end("BackHair", last=False)
+    return lives, root
+
+
+def create_live2dpart_each(ctx, name, parent):
+    z, res, _ = func_table[name]
     data = MODEL_DATA[name]
     textures = {}
     for path in data["filename"]:
@@ -141,7 +150,7 @@ class MyGame(arcade.Window):
         self.camera.position = (0, 950)
         self.camera.zoom = 1.5
         self.hair_bones = None
-        self.setup_scene()
+        self.lives, self.root = create_live2dpart(self.ctx)
 
     def notify_face_info(self, face_info):
         with self.lock:
@@ -150,143 +159,18 @@ class MyGame(arcade.Window):
     def __del__(self):
         self.tracker.release()
 
-    def create_live2dpart(self, name, parent=None):
-        return create_live2dpart(self.ctx, name, mode_mesh, parent)
-
-    def setup_scene(self):
-        # --- 1. 建立根節點 (Face) ---
-        # 假設你的 JSON 裡臉部叫做 "face" (如果不一樣請修改 key)
-        # body
-        body = self.create_live2dpart("Body")
-        back_hair = self.create_live2dpart("BackHair", body)
-        face = self.create_live2dpart("Face", body)
-        landmarks = self.create_live2dpart("FaceLandmark", face)
-        eye_lid_L = self.create_live2dpart("EyeLidL", face)
-        eye_lid_R = self.create_live2dpart("EyeLidR", face)
-        eye_white_L = self.create_live2dpart("EyeWhiteL", face)
-        eye_white_R = self.create_live2dpart("EyeWhiteR", face)
-        eye_pupil_L = self.create_live2dpart("EyePupilL", face)
-        eye_pupil_R = self.create_live2dpart("EyePupilR", face)
-        eye_lash_L = self.create_live2dpart("EyeLashL", face)
-        eye_lash_R = self.create_live2dpart("EyeLashR", face)
-        eye_brow_L = self.create_live2dpart("EyeBrowL", face)
-        eye_brow_R = self.create_live2dpart("EyeBrowR", face)
-        mouth = self.create_live2dpart("Mouth", face)
-        front_hair_left = self.create_live2dpart("FrontHairLeft", face)
-        front_hair_middle = self.create_live2dpart("FrontHairMiddle", face)
-        front_hair_middle_shadow = self.create_live2dpart("FrontHairShadowMiddle", face)
-        front_hair_left_shadow = self.create_live2dpart("FrontHairShadowLeft", face)
-
-        self.drawlist = [
-            back_hair,
-            body,
-            face,
-            landmarks,
-            eye_white_L,
-            eye_white_R,
-            eye_pupil_L,
-            eye_pupil_R,
-            eye_lid_L,
-            eye_lid_R,
-            eye_lash_L,
-            eye_lash_R,
-            eye_brow_L,
-            eye_brow_R,
-            mouth,
-            front_hair_left_shadow,
-            front_hair_middle_shadow,
-            front_hair_left,
-            front_hair_middle,
-        ]
-        self.body = body
-
-        # self.eye_lid_L.set_depend(
-        #    children={
-        #        "eye_lash": self.eye_lash_L,
-        #        "eye_white": self.eye_white_L,
-        #        "eye_pupil": self.eye_pupil_L,
-        #    }
-        # )
-        # self.eye_lid_R.set_depend(
-        #    children={
-        #        "eye_lash": self.eye_lash_R,
-        #        "eye_white": self.eye_white_R,
-        #        "eye_pupil": self.eye_pupil_R,
-        #    }
-        # )
-        # self.groups = {
-        #    "FaceFeature": [
-        #        # self.face_landmarks,
-        #        self.mouth,
-        #        self.eye_white_L,
-        #        self.eye_white_R,
-        #        self.eye_lid_L,
-        #        self.eye_lid_R,
-        #        self.eye_lash_L,
-        #        self.eye_lash_R,
-        #        self.eye_brow_L,
-        #        self.eye_brow_R,
-        #        self.hair_left_mesh,
-        #        self.hair_middle_mesh,
-        #        self.hair_right_mesh,
-        #    ],
-        #    "FrontShadow": [
-        #        self.hair_front_left_shadow_mesh,
-        #        self.hair_front_right_shadow_mesh,
-        #        self.hair_front_middle_shadow_mesh,
-        #    ],
-        #    "FaceBase": [self.face],
-        #    "BackHair": [self.back_hair_mesh],
-        # }
-
     def on_draw(self):
         self.clear()
         self.camera.use()
 
-        for obj in self.drawlist:
+        for _, obj in self.lives.items():
             obj.draw()
 
     def update_pose(self, face_info):
         yaw, pitch, roll = filterHead(face_info["Pose"])
-        # 2. 定義強度 (這就是你要一直調的參數)
-        # 代表轉 1 度，像素要移動多少 px
-        PARALLAX_X_STRENGTH = -0.4
-        PARALLAX_Y_STRENGTH = 0.5
-        # 3. 計算各層的位移量 (Offset)
-        # Layer Depth Multipliers (深度乘數)
-        # 前面動得快，後面動得慢
-        OFFSET_FRONT = 1.0001  # 前髮、五官
-        OFFSET_MID = 1.0  # 臉型
-        OFFSET_BACK = 0.9999  # 後髮
-        OFFSET_FRONT_SHADOW = 0.5
-        # 計算 X 軸位移
-        move_x_front_shadow = yaw * PARALLAX_X_STRENGTH * OFFSET_FRONT_SHADOW
-        move_x_front = yaw * PARALLAX_X_STRENGTH * OFFSET_FRONT
-        move_x_mid = yaw * PARALLAX_X_STRENGTH * OFFSET_MID
-        move_x_back = yaw * PARALLAX_X_STRENGTH * OFFSET_BACK
-        # 計算 Y 軸位移
-        move_y_front_shadow = pitch * PARALLAX_Y_STRENGTH * OFFSET_FRONT_SHADOW
-        move_y_front = pitch * PARALLAX_Y_STRENGTH * OFFSET_FRONT
-        move_y_mid = pitch * PARALLAX_Y_STRENGTH * OFFSET_MID
-        move_y_back = pitch * PARALLAX_Y_STRENGTH * OFFSET_BACK
-
-        # 4. 應用到 Sprites (記得加上原本的基礎位置)
-        # 假設 base_x 是螢幕中心
-        face_info["FrontShadowOffset"] = (move_x_front_shadow, 4 * move_y_front_shadow)
-        face_info["FaceFeatureOffset"] = (move_x_front, move_y_front)
-        face_info["FaceBaseOffset"] = (move_x_mid, move_y_mid)
-        face_info["BackHairOffset"] = (move_x_back, move_y_back)
-
-        # self.face_landmarks.update(move_x_front, move_y_front)
-
-        # for group, sprites in self.groups.items():
-        #    add_x, add_y = face_info[group + "Offset"]
-        #    for s in sprites:
-        #        s.local_x = s.base_local_x + add_x
-        #        s.local_y = s.base_local_y + add_y
-        # self.body.local_x = self.body.base_local_x + move_x_back
-        # self.body.local_y = self.body.base_local_y - move_y_back
-
+        face_info["Yaw"] = yaw
+        face_info["Pitch"] = pitch
+        face_info["Roll"] = roll
         ## front hair physics
         # yaw_velocity = yaw - self.last_yaw
 
@@ -335,11 +219,11 @@ class MyGame(arcade.Window):
             return
         self.total_time += delta_time
         self.update_pose(face_info)
-        self.body.update(face_info)
+        self.root.update(face_info)
 
 
 if __name__ == "__main__":
     # 載入設定檔
-    # game = MyGame(tracker=FakeTracker())
-    game = MyGame(tracker=AsyncFaceTracker())
+    game = MyGame(tracker=FakeTracker())
+    # game = MyGame(tracker=AsyncFaceTracker())
     arcade.run()

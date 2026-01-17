@@ -65,9 +65,8 @@ def pupils_response(dir, live, data):
         return raw_x, raw_y
 
     x, y = convertPupils(data["PupilsPos"], calibration, is_blinking(bl, br))
-    add_x, add_y = data["FaceBaseOffset"]
-    live.add_x = x + add_x
-    live.add_y = y + add_y
+    live.add_x = x
+    live.add_y = y
     if block_blinking(get_blink(dir, data)):
         live.sx = 0
     else:

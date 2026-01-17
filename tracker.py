@@ -440,7 +440,7 @@ class FakeTracker:
                     "PupilsPos": (-seed, 0.5 * seed),
                     "Blinking": (seed, seed),
                     "MouthOpenness": seed,
-                    "Pose": (0, 0, 0),
+                    "Pose": (15 * seed, 15 * seed, 0),
                 },
             )
             # 稍微休息一下，避免吃光 CPU (約 60 FPS)

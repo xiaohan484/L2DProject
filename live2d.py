@@ -18,29 +18,39 @@ def get_local_matrix(angle, sx, sy, tx, ty):
     )
 
 
-from Const import GLOBAL_SCALE
+front_shadow_z = 3
+face_feature_z = 2
+face_base_z = 1
+body_base_z = 0
+back_hair_z = -1
 
+PARALLAX_X_STRENGTH = -0.4
+PARALLAX_Y_STRENGTH = 0.5
 
-def initial_coorLive(part, data):
-    raw_global_x = data["global_center_x"]
-    raw_global_y = data["global_center_y"]
-    if part.parent:
-        base_x = raw_global_x - part.parent.initial_global_x
-        base_y = raw_global_y - part.parent.initial_global_y
-        part.x = base_x
-        part.y = base_y
-        part.local_x = base_x
-        part.local_y = base_y
-        part.initial_global_x = raw_global_x
-        part.initial_global_y = raw_global_yal_y = raw_global_y
-    else:
-        part.x = 0
-        part.y = 0 - 950 * GLOBAL_SCALE  # 試著改成 +50 或 -50 看看效果
-        part.center_x = part.base_local_x
-        part.center_y = part.base_local_y
-        # 記錄初始絕對座標 (這兩行不變)
-        part.initial_global_x = raw_global_x
-        part.initial_global_y = raw_global_yal_y = raw_global_y
+# Body is zero
+
+# Face is Base of other feature
+OFFSET_MID = 1.0  # 臉型
+OFFSET_BACK = 0.9999  # 後髮
+OFFSET_FRONT = 1.0001  # 前髮、五官
+OFFSET_FRONT_SHADOW = 0.5
+
+rotate_response = {
+    front_shadow_z: (
+        PARALLAX_X_STRENGTH * OFFSET_FRONT_SHADOW,
+        4 * PARALLAX_Y_STRENGTH * OFFSET_FRONT_SHADOW,
+    ),
+    face_feature_z: (
+        PARALLAX_X_STRENGTH * OFFSET_FRONT,
+        PARALLAX_Y_STRENGTH * OFFSET_FRONT,
+    ),
+    face_base_z: (PARALLAX_X_STRENGTH * OFFSET_MID, PARALLAX_Y_STRENGTH * OFFSET_MID),
+    body_base_z: (0, 0),
+    back_hair_z: (
+        PARALLAX_X_STRENGTH * OFFSET_BACK,
+        PARALLAX_Y_STRENGTH * OFFSET_BACK,
+    ),
+}
 
 
 class Live2DPart:
@@ -104,12 +114,24 @@ class Live2DPart:
         update Matrix and recursively update children
         """
         # self.response()
+        (offset_x, offset_y) = (0, 0)
         skip = data is None or self.response is None
         if skip is False:
             self.response(self, data)
-
+        if data is not None:
+            (offset_x, offset_y) = rotate_response[self.z_depth]
+            yaw = data["Yaw"]
+            pitch = data["Pitch"]
+            offset_x *= yaw
+            offset_y *= -pitch
+            if self.z_depth == face_base_z:
+                print(offset_x, offset_y, yaw)
         self.local_matrix = get_local_matrix(
-            self.angle, self.sx, self.sy, self.x + self.add_x, self.y + self.add_y
+            self.angle,
+            self.sx,
+            self.sy,
+            self.x + self.add_x + offset_x,
+            self.y + self.add_y + offset_y,
         )
         if self.parent:
             self.world_matrix = self.parent.world_matrix @ self.local_matrix
