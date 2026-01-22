@@ -124,8 +124,6 @@ class Live2DPart:
             pitch = data["Pitch"]
             offset_x *= yaw
             offset_y *= -pitch
-            if self.z_depth == face_base_z:
-                print(offset_x, offset_y, yaw)
         self.local_matrix = get_local_matrix(
             self.angle,
             self.sx,

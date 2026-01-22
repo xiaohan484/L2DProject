@@ -177,7 +177,7 @@ class FaceTracker:
 
         dx = self.blendshapes["eyeLookOutLeft"] - self.blendshapes["eyeLookInLeft"]
         dy = self.blendshapes["eyeLookUpLeft"] - self.blendshapes["eyeLookDownLeft"]
-        return -dx, -dy * 1.2
+        return -dx, dy * 1.2
 
     def calculate_mouth_openness(self):
         """

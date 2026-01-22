@@ -28,11 +28,11 @@ func_table = OrderedDict(
         "Body": (body_base_z, body_response, None),
         "BackHair": (back_hair_z, None, "Body"),
         "Face": (face_base_z, None, "Body"),
-        "FaceLandmark": (face_feature_z, None, "Face"),
         "EyeWhiteL": (face_feature_z, white_response_l, "Face"),
         "EyeWhiteR": (face_feature_z, white_response_r, "Face"),
         "EyePupilL": (face_feature_z, pupils_response_l, "Face"),
         "EyePupilR": (face_feature_z, pupils_response_r, "Face"),
+        "FaceLandmark": (face_feature_z, None, "Face"),
         "EyeLidL": (face_feature_z, lid_response_l, "Face"),
         "EyeLidR": (face_feature_z, lid_response_r, "Face"),
         "EyeLashL": (face_feature_z, lash_response_l, "Face"),
@@ -224,6 +224,6 @@ class MyGame(arcade.Window):
 
 if __name__ == "__main__":
     # 載入設定檔
-    game = MyGame(tracker=FakeTracker())
-    # game = MyGame(tracker=AsyncFaceTracker())
+    # game = MyGame(tracker=FakeTracker())
+    game = MyGame(tracker=AsyncFaceTracker())
     arcade.run()
