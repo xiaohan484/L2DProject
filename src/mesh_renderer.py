@@ -482,3 +482,81 @@ test_path = "assets/sample_model/processed/FrontHairLeft.png"
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
+
+class CustomMesh(GridMesh):
+    def __init__(self, context, texture_path, pts, tris, scale=1.0, parent=None):
+        self.ctx = context
+        # Load texture
+        # Handle dict or string for texture_path
+        if isinstance(texture_path, dict):
+             self.state_textures = {}
+             for state, path in texture_path.items():
+                self.state_textures[state] = self.ctx.load_texture(path)
+             self.current_state, self.texture = next(iter(self.state_textures.items()))
+        else:
+             self.texture = self.ctx.load_texture(texture_path)
+             self.state_textures = {"default": self.texture}
+             self.current_state = "default"
+        
+        self.geometry = {}
+        
+        # Shader setup (reuse GridMesh logic by copying or calling init? 
+        # GridMesh.__init__ does a lot of grid specific stuff. 
+        # Ideally we refactor, but for now let's copy the shader part or mock attributes)
+        
+        # We can call super init but it expects grid_size. 
+        # Let's call super with dummy grid and overwrite.
+        super().__init__(context, {self.current_state: texture_path} if isinstance(texture_path, str) else texture_path, grid_size=(1,1), scale=scale, parent=parent)
+        
+        # Overwrite geometry with custom data
+        width = self.texture.width
+        height = self.texture.height
+        
+        # Re-generate geometry for all states
+        for state, texture in self.state_textures.items():
+            self.setup_custom_mesh_data(state, pts, tris, texture.width, texture.height)
+
+    def setup_custom_mesh_data(self, name, pts, tris, width, height):
+        vertices = []
+        indices = tris.flatten().tolist()
+        
+        # Center of the image
+        center_x = width / 2
+        center_y = height / 2
+        
+        # pts from OpenCV are (x, y) with y down.
+        # We need to map to Arcade conceptual space.
+        # Assuming we want to display it such that it matches the image content.
+        # Arcade coordinate system:
+        # If we draw at (0,0), and use standard projection.
+        
+        for pt in pts:
+            x, y = pt
+            
+            # Position (centered)
+            # Flip Y for rendering if we assume standard OpenGL Y-up, 
+            # effectively (height - y) maps image Y to cartesian Y.
+            # GridMesh used: py = start_y + r * step_y. 
+            # If start_y is bottom, loop goes up.
+            
+            px = x - center_x
+            py = (height - y) - center_y
+            
+            # UV
+            u = x / width
+            v = 1.0 - (y / height)
+            
+            vertices.extend([px, py, u, v])
+
+        # Buffer setup matching GridMesh
+        self.original_vertices = np.array(vertices, dtype="f4")
+        self.current_vertices = self.original_vertices.copy()
+        
+        self.vbo = self.ctx.buffer(data=array("f", self.current_vertices))
+        self.ibo = self.ctx.buffer(data=array("I", indices))
+        
+        self.geometry[name] = self.ctx.geometry(
+            [arcade.gl.BufferDescription(self.vbo, "2f 2f", ["in_vert", "in_uv"])],
+            index_buffer=self.ibo,
+            mode=self.ctx.TRIANGLES,
+        )

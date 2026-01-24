@@ -68,12 +68,12 @@ def get_edges(tris):
 
 
 class PBDCloth2D:
-    def __init__(self, pts, tris, dt=0.016):
+    def __init__(self, pts, tris, stiffness=0.1, dt=0.016):
         # pts shape: (N, 2)
         self.pos = pts.astype(np.float64)
         self.vel = np.zeros_like(self.pos)
         self.inv_mass = np.ones(len(self.pos))
-
+        self.stiffness = stiffness  # Adjustable stiffness
 
         # Fixed the top points (top 5%)
         max_y = np.max(self.pos[:, 1])
@@ -112,8 +112,7 @@ class PBDCloth2D:
         # 3. 計算誤差
         # Avoid division by zero
         dists = np.where(dists < 1e-9, 1e-9, dists)
-        stiffness = 0.1  # Adjustable stiffness
-        
+
         # 4. 計算修正量
         # w_sum = w1 + w2
         w1 = self.inv_mass[self.edges[:, 0]]
@@ -125,8 +124,8 @@ class PBDCloth2D:
         corrections = np.zeros_like(deltas)
         # Correction formula: delta_p = (w / w_sum) * diff * deltas
         # diff = (dists - rest_lengths) / dists * stiffness
-        
-        diff = (dists[mask] - self.rest_lengths[mask]) / dists[mask] * stiffness
+
+        diff = (dists[mask] - self.rest_lengths[mask]) / dists[mask] * self.stiffness
         corrections[mask] = (diff / w_sum[mask])[:, np.newaxis] * deltas[mask]
 
         # 5. Update positions (tricky part: a single point may belong to multiple edges)
@@ -134,6 +133,7 @@ class PBDCloth2D:
         # print(corrections)
         np.add.at(p, self.edges[:, 0], -w1[:, np.newaxis] * corrections)
         np.add.at(p, self.edges[:, 1], w2[:, np.newaxis] * corrections)
+
     def _solve_distance_constraints(self, p):
         for i, (idx1, idx2) in enumerate(self.edges):
             w1, w2 = self.inv_mass[idx1], self.inv_mass[idx2]
@@ -169,6 +169,8 @@ class PBDCloth2D:
         self.vel[~moving_mask] = 0.0  # Force velocity of fixed points to 0
 
         self.pos = p.copy()
+
+
 if __name__ == "__main__":
     # --- 1. Initialize data ---
     # Create a 2D vertical grid
@@ -182,15 +184,16 @@ if __name__ == "__main__":
     margin = 1.0
     ax.set_aspect("equal")
 
-
     # Use PolyCollection for efficient updates
     # vertices shape needs to be (N_tris, 3, 2)
     def get_verts():
         return [sim.pos[t] for t in sim.tris]
+
     poly_coll = PolyCollection(
         get_verts(), edgecolors="blue", facecolors="skyblue", alpha=0.5
     )
     ax.add_collection(poly_coll)
+
     def update(frame):
         # 1. Find indices of fixed points (where inv_mass == 0)
         fixed_mask = sim.inv_mass == 0
@@ -228,6 +231,7 @@ if __name__ == "__main__":
         end_render = time.perf_counter()
         print(f"Sim: {end_sim-start_sim:.4f}s, Render: {end_render-start_render:.4f}s")
         return (poly_coll,)
+
     # --- 3. Start animation ---
     ani = FuncAnimation(fig, update, frames=200, interval=20, blit=True)
     plt.title("2D PBD Cloth Simulation (1:1 Aspect)")
