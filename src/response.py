@@ -37,6 +37,11 @@ def body_response(live, data):
     return
 
 
+def face_response(live, data):
+    live.angle = data["Roll"]
+    return
+
+
 last_valid_eye_x = 0
 last_valid_eye_y = 0
 

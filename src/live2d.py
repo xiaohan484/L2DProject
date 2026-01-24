@@ -3,6 +3,118 @@ from typing import Optional
 import arcade
 import numpy as np
 from mesh_renderer import GridMesh
+from response import *
+from collections import OrderedDict
+import os
+
+front_shadow_z = 3
+face_feature_z = 2
+face_base_z = 1
+body_base_z = 0
+back_hair_z = -1
+
+func_table = OrderedDict(
+    {
+        "Body": (body_base_z, body_response, None),
+        "Face": (face_base_z, face_response, "Body"),
+        "BackHair": (back_hair_z, None, "Face"),
+        "EyeWhiteL": (face_feature_z, white_response_l, "Face"),
+        "EyeWhiteR": (face_feature_z, white_response_r, "Face"),
+        "EyePupilL": (face_feature_z, pupils_response_l, "Face"),
+        "EyePupilR": (face_feature_z, pupils_response_r, "Face"),
+        "FaceLandmark": (face_feature_z, None, "Face"),
+        "EyeLidL": (face_feature_z, lid_response_l, "Face"),
+        "EyeLidR": (face_feature_z, lid_response_r, "Face"),
+        "EyeLashL": (face_feature_z, lash_response_l, "Face"),
+        "EyeLashR": (face_feature_z, lash_response_r, "Face"),
+        "EyeBrowL": (face_feature_z, None, "Face"),
+        "EyeBrowR": (face_feature_z, None, "Face"),
+        "Mouth": (face_feature_z, mouth_response, "Face"),
+        "FrontHairShadowLeft": (front_shadow_z, None, "Face"),
+        "FrontHairShadowMiddle": (front_shadow_z, None, "Face"),
+        "FrontHairLeft": (face_feature_z, None, "Face"),
+        "FrontHairMiddle": (face_feature_z, None, "Face"),
+    }
+)
+
+def load_local_position(global_pos, parent_global_pos, global_scale):
+    # Calculate the relative distance in global space
+    delta_x = global_pos[0] - parent_global_pos[0]
+    delta_y = global_pos[1] - parent_global_pos[1]
+
+    # Scale down the delta to get the original local position
+    local_x = delta_x / global_scale
+    local_y = delta_y / global_scale
+
+    return local_x, local_y
+
+
+def create_live2dpart(ctx):
+    lives = OrderedDict({})
+    for name, (_, _, parent) in func_table.items():
+        if parent is not None:
+            parent = lives[parent]
+        lives[name] = create_live2dpart_each(ctx, name, parent)
+    root = lives["Body"]
+    lives.move_to_end("BackHair", last=False)
+    return lives, root
+
+
+def create_live2dpart_each(ctx, name, parent):
+    z, res, _ = func_table[name]
+    data = MODEL_DATA[name]
+    textures = {}
+    for path in data["filename"]:
+        filepath = os.path.join("assets/sample_model/processed", path)
+        p = path.removesuffix(".png")
+        textures[p] = filepath
+
+    raw_global_x = data["global_center_x"]
+    raw_global_y = data["global_center_y"]
+    view = GridMesh(
+        ctx,
+        textures,
+        grid_size=(10, 10),
+        scale=GLOBAL_SCALE,
+        parent=None,
+        data_key=data,  # 10x10 的格子
+    )
+
+    if parent == None:
+        return Live2DPart(
+            name=name,
+            parent=None,
+            x=0,
+            y=0,
+            z=z,
+            scale_x=GLOBAL_SCALE,
+            scale_y=GLOBAL_SCALE,
+            angle=0,
+            view=view,
+            response=res,
+        )
+    else:
+        parent_global = (
+            MODEL_DATA[parent.name]["global_center_x"],
+            MODEL_DATA[parent.name]["global_center_y"],
+        )
+        pos = load_local_position(
+            global_pos=(raw_global_x, raw_global_y),
+            parent_global_pos=parent_global,
+            global_scale=GLOBAL_SCALE,
+        )
+        return Live2DPart(
+            name=name,
+            parent=parent,
+            x=pos[0],
+            y=-pos[1],
+            z=z,
+            scale_x=GLOBAL_SCALE,
+            scale_y=GLOBAL_SCALE,
+            angle=0,
+            view=view,
+            response=res,
+        )
 
 
 def get_local_matrix(angle, sx, sy, tx, ty):
@@ -17,12 +129,6 @@ def get_local_matrix(angle, sx, sy, tx, ty):
         ]
     )
 
-
-front_shadow_z = 3
-face_feature_z = 2
-face_base_z = 1
-body_base_z = 0
-back_hair_z = -1
 
 PARALLAX_X_STRENGTH = -0.4
 PARALLAX_Y_STRENGTH = 0.5
