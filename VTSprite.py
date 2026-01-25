@@ -206,19 +206,6 @@ class LidSprite(VTSprite):
 
 
 # 針對頭部動作，通常 beta (速度響應) 可以設小一點，讓頭部感覺比較重、比較穩
-head_yaw_filter = OneEuroFilter(min_cutoff=10, beta=0.1)
-head_pitch_filter = OneEuroFilter(min_cutoff=10, beta=0.1)
-head_roll_filter = OneEuroFilter(min_cutoff=10, beta=0.1)
-
-
-def filterHead(head_pose):
-
-    current_time = time.time()
-    yaw, pitch, roll = head_pose
-    yaw = head_yaw_filter(current_time, yaw)
-    pitch = head_pitch_filter(current_time, pitch)
-    roll = head_roll_filter(current_time, roll)
-    return yaw, pitch, roll
 
 
 if __name__ == "__main__":

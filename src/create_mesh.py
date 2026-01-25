@@ -68,19 +68,19 @@ def get_edges(tris):
 
 
 class PBDCloth2D:
-    def __init__(self, pts, tris, stiffness=0.1, dt=0.016):
+    def __init__(self, pts, tris, stiffness=0.1, dt=0.016, fixed_ratio=0.1):
         # pts shape: (N, 2)
         self.pos = pts.astype(np.float64)
         self.vel = np.zeros_like(self.pos)
         self.inv_mass = np.ones(len(self.pos))
         self.stiffness = stiffness  # Adjustable stiffness
 
-        # Fixed the top points (top 5%)
+        # Fixed the top points (top fixed_ratio)
         max_y = np.max(self.pos[:, 1])
         min_y = np.min(self.pos[:, 1])
         height = max_y - min_y
-        fixed_indices = np.where(self.pos[:, 1] >= max_y - height * 0.1)[0]
-        self.inv_mass[fixed_indices] = 0.0
+        self.fixed_indices = np.where(self.pos[:, 1] >= max_y - height * fixed_ratio)[0]
+        self.inv_mass[self.fixed_indices] = 0.0
 
         self.tris = tris
         self.edges = self._get_edges(tris)

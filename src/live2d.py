@@ -3,6 +3,13 @@ from typing import Optional
 import arcade
 import numpy as np
 from mesh_renderer import GridMesh
+
+try:
+    from mesh_renderer import CustomMesh
+except ImportError:
+    pass
+from create_mesh import create_image_mesh, PBDCloth2D
+from Const import MODEL_PATH, MODEL_DATA, GLOBAL_SCALE
 from response import *
 from collections import OrderedDict
 import os
@@ -13,29 +20,51 @@ face_base_z = 1
 body_base_z = 0
 back_hair_z = -1
 
+# Config types
+CFG_GRID = 0
+CFG_PHYSICS = 1
+
 func_table = OrderedDict(
     {
-        "Body": (body_base_z, body_response, None),
-        "Face": (face_base_z, face_response, "Body"),
-        "BackHair": (back_hair_z, None, "Face"),
-        "EyeWhiteL": (face_feature_z, white_response_l, "Face"),
-        "EyeWhiteR": (face_feature_z, white_response_r, "Face"),
-        "EyePupilL": (face_feature_z, pupils_response_l, "Face"),
-        "EyePupilR": (face_feature_z, pupils_response_r, "Face"),
-        "FaceLandmark": (face_feature_z, None, "Face"),
-        "EyeLidL": (face_feature_z, lid_response_l, "Face"),
-        "EyeLidR": (face_feature_z, lid_response_r, "Face"),
-        "EyeLashL": (face_feature_z, lash_response_l, "Face"),
-        "EyeLashR": (face_feature_z, lash_response_r, "Face"),
-        "EyeBrowL": (face_feature_z, None, "Face"),
-        "EyeBrowR": (face_feature_z, None, "Face"),
-        "Mouth": (face_feature_z, mouth_response, "Face"),
-        "FrontHairShadowLeft": (front_shadow_z, None, "Face"),
-        "FrontHairShadowMiddle": (front_shadow_z, None, "Face"),
-        "FrontHairLeft": (face_feature_z, None, "Face"),
-        "FrontHairMiddle": (face_feature_z, None, "Face"),
+        "Body": (body_base_z, body_response, None, CFG_GRID),
+        "Face": (face_base_z, face_response, "Body", CFG_GRID),
+        "BackHair": (
+            back_hair_z,
+            None,
+            "Face",
+            # CFG_GRID,
+            {"type": CFG_PHYSICS, "stiffness": 0.3, "fixed_ratio": 0.4},
+        ),
+        "EyeWhiteL": (face_feature_z, white_response_l, "Face", CFG_GRID),
+        "EyeWhiteR": (face_feature_z, white_response_r, "Face", CFG_GRID),
+        "EyePupilL": (face_feature_z, pupils_response_l, "Face", CFG_GRID),
+        "EyePupilR": (face_feature_z, pupils_response_r, "Face", CFG_GRID),
+        "FaceLandmark": (face_feature_z, None, "Face", CFG_GRID),
+        "EyeLidL": (face_feature_z, lid_response_l, "Face", CFG_GRID),
+        "EyeLidR": (face_feature_z, lid_response_r, "Face", CFG_GRID),
+        "EyeLashL": (face_feature_z, lash_response_l, "Face", CFG_GRID),
+        "EyeLashR": (face_feature_z, lash_response_r, "Face", CFG_GRID),
+        "EyeBrowL": (face_feature_z, None, "Face", CFG_GRID),
+        "EyeBrowR": (face_feature_z, None, "Face", CFG_GRID),
+        "Mouth": (face_feature_z, mouth_response, "Face", CFG_GRID),
+        # "FrontHairShadowLeft": (front_shadow_z, None, "Face", CFG_GRID),
+        # "FrontHairShadowMiddle": (front_shadow_z, None, "Face", CFG_GRID),
+        "FrontHairLeft": (
+            face_feature_z,
+            None,
+            "Face",
+            {"type": CFG_PHYSICS, "stiffness": 0.3, "fixed_ratio": 0.3},
+        ),
+        "FrontHairMiddle": (
+            face_feature_z,
+            None,
+            "Face",
+            # CFG_GRID,
+            {"type": CFG_PHYSICS, "stiffness": 0.5, "fixed_ratio": 0.5},
+        ),
     }
 )
+
 
 def load_local_position(global_pos, parent_global_pos, global_scale):
     # Calculate the relative distance in global space
@@ -51,7 +80,13 @@ def load_local_position(global_pos, parent_global_pos, global_scale):
 
 def create_live2dpart(ctx):
     lives = OrderedDict({})
-    for name, (_, _, parent) in func_table.items():
+    for name, args in func_table.items():
+        # Handle 3 or 4 args for robustness, though we updated all to 4
+        if len(args) == 4:
+            _, _, parent, _ = args
+        else:
+            _, _, parent = args
+
         if parent is not None:
             parent = lives[parent]
         lives[name] = create_live2dpart_each(ctx, name, parent)
@@ -61,24 +96,67 @@ def create_live2dpart(ctx):
 
 
 def create_live2dpart_each(ctx, name, parent):
-    z, res, _ = func_table[name]
+    # Unpack config
+    args = func_table[name]
+    z = args[0]
+    res = args[1]
+
+    config_type = CFG_GRID
+    physics_params = {}
+
+    if len(args) >= 4:
+        cfg = args[3]
+        if isinstance(cfg, dict):
+            config_type = cfg.get("type", CFG_GRID)
+            physics_params = cfg
+        else:
+            config_type = cfg
+
     data = MODEL_DATA[name]
-    textures = {}
-    for path in data["filename"]:
-        filepath = os.path.join("assets/sample_model/processed", path)
-        p = path.removesuffix(".png")
-        textures[p] = filepath
 
     raw_global_x = data["global_center_x"]
     raw_global_y = data["global_center_y"]
-    view = GridMesh(
-        ctx,
-        textures,
-        grid_size=(10, 10),
-        scale=GLOBAL_SCALE,
-        parent=None,
-        data_key=data,  # 10x10 的格子
-    )
+
+    view = None
+    physics_solver = None
+
+    if config_type == CFG_PHYSICS:
+        # PBD Physics Setup
+        filename = data["filename"][0]  # Assume 1 file for physics parts for now
+        image_path = os.path.join(MODEL_PATH, filename)
+
+        # 1. Generate Mesh
+        pts, tris = create_image_mesh(image_path, debug=False)
+
+        # 2. Create CustomMesh
+        view = CustomMesh(ctx, image_path, pts, tris, scale=GLOBAL_SCALE)
+
+        # 3. Initialize Physics
+        render_verts = view.original_vertices.reshape(-1, 4)[:, :2]
+        sim_pts = render_verts.copy()
+
+        # Extract params with defaults
+        stiff = physics_params.get("stiffness", 0.3)
+        ratio = physics_params.get("fixed_ratio", 0.1)
+
+        physics_solver = PBDCloth2D(sim_pts, tris, stiffness=stiff, fixed_ratio=ratio)
+
+    else:
+        # Standard GridMesh Setup
+        textures = {}
+        for path in data["filename"]:
+            filepath = os.path.join("assets/sample_model/processed", path)
+            p = path.removesuffix(".png")
+            textures[p] = filepath
+
+        view = GridMesh(
+            ctx,
+            textures,
+            grid_size=(10, 10),
+            scale=GLOBAL_SCALE,
+            parent=None,
+            data_key=data,  # 10x10 的格子
+        )
 
     if parent == None:
         return Live2DPart(
@@ -92,6 +170,7 @@ def create_live2dpart_each(ctx, name, parent):
             angle=0,
             view=view,
             response=res,
+            physics_solver=physics_solver,
         )
     else:
         parent_global = (
@@ -114,6 +193,7 @@ def create_live2dpart_each(ctx, name, parent):
             angle=0,
             view=view,
             response=res,
+            physics_solver=physics_solver,
         )
 
 
@@ -177,6 +257,7 @@ class Live2DPart:
         scale_y: float = 1,
         view=None,
         response=None,
+        physics_solver=None,
     ):
         self.name = name
         # Local space properties
@@ -189,6 +270,13 @@ class Live2DPart:
         self.y = y
         self.parent = parent
         self.response = response
+        self.physics_solver = physics_solver
+        self.physics_initialized = False
+        if self.physics_solver is not None:
+            self.physics_init_local_pos = self.physics_solver.pos.copy()
+        else:
+            self.physics_init_local_pos = None
+
         if parent:
             parent.set_child(self)
         self.local_matrix = np.eye(3)
@@ -242,6 +330,65 @@ class Live2DPart:
         else:
             self.world_matrix = self.local_matrix
 
+        # Physics Update
+        if self.physics_solver is not None:
+            # Physics runs in WORLD SPACE to handle gravity and inertia correctly.
+
+            # 1. Initialize logic (First Frame or Reset)
+            if not self.physics_initialized:
+                # Transform local rest positions to world space so sim starts at correct location
+                pts = self.physics_solver.pos
+                ones = np.ones((len(pts), 1))
+                pts_h = np.hstack([pts, ones])
+
+                # World = Mat @ Local
+                # (3, 3) @ (3, N) -> (3, N) -> T -> (N, 3)
+                world_pts = (self.world_matrix @ pts_h.T).T
+                self.physics_solver.pos = world_pts[:, :2]
+                self.physics_solver.prev_pos = (
+                    self.physics_solver.pos.copy()
+                )  # Reset velocity
+                self.physics_initialized = True
+
+            # 2. Update Fixed Points (Anchors) to current World Position
+            # We want the anchors to strictly follow the head (parent)
+            fixed_idx = self.physics_solver.fixed_indices
+
+            # Get their original local positions
+            local_fixed = self.physics_init_local_pos[fixed_idx]
+
+            # Transform to World
+            ones = np.ones((len(local_fixed), 1))
+            local_fixed_h = np.hstack([local_fixed, ones])
+            # Matrix Mult
+            world_fixed = (self.world_matrix @ local_fixed_h.T).T
+
+            # Force solver positions
+            self.physics_solver.pos[fixed_idx] = world_fixed[:, :2]
+
+            # 3. Step Physics
+            # TODO: time delta
+            self.physics_solver.step(10)
+
+            # 4. Prepare for Rendering (World -> Local)
+            # The View (CustomMesh) expects LOCAL coordinates because it is drawn with self.world_matrix.
+            try:
+                inv_mat = np.linalg.inv(self.world_matrix)
+            except np.linalg.LinAlgError:
+                inv_mat = np.eye(3)
+
+            sim_world = self.physics_solver.pos
+            ones = np.ones((len(sim_world), 1))
+            sim_world_h = np.hstack([sim_world, ones])
+
+            sim_local = (inv_mat @ sim_world_h.T).T
+
+            # 5. Update Mesh VBO
+            if hasattr(self.views, "current_vertices"):
+                data_view = self.views.current_vertices.reshape(-1, 4)
+                data_view[:, :2] = sim_local[:, :2]
+                self.views.update_buffer()
+
         for child in self.children:
             child.update(data)
 
@@ -266,7 +413,7 @@ class Live2DPart:
         if isinstance(self.views, arcade.SpriteList):
             self.sync()
             self.views.draw(**kwargs)
-        elif isinstance(self.views, GridMesh):
+        elif isinstance(self.views, GridMesh) or isinstance(self.views, CustomMesh):
             self.views.draw(self.world_matrix)
 
     def get_world_position(self):

@@ -3,19 +3,28 @@ import threading
 from Const import *
 import arcade
 from tracker import AsyncFaceTracker, FakeTracker
-from ValueUtils import *
+
+# from ValueUtils import *
 from create_mesh import create_image_mesh, PBDCloth2D
-
-try:
-    from mesh_renderer import GridMesh, CustomMesh
-except ImportError:
-    from mesh_renderer import GridMesh
-
-    # Fallback or ensure CustomMesh is available (it was added in prev step)
-    pass
-
+from mesh_renderer import GridMesh, CustomMesh
 import numpy as np
 from live2d import Live2DPart, create_live2dpart, create_live2dpart_each
+from pubsub import pub
+from filters import OneEuroFilter
+import time
+
+head_yaw_filter = OneEuroFilter(min_cutoff=10, beta=0.1)
+head_pitch_filter = OneEuroFilter(min_cutoff=10, beta=0.1)
+head_roll_filter = OneEuroFilter(min_cutoff=10, beta=0.1)
+
+
+def filterHead(head_pose):
+    current_time = time.time()
+    yaw, pitch, roll = head_pose
+    yaw = head_yaw_filter(current_time, yaw)
+    pitch = head_pitch_filter(current_time, pitch)
+    roll = head_roll_filter(current_time, roll)
+    return yaw, pitch, roll
 
 
 class Live2DEngine(arcade.Window):
@@ -30,10 +39,6 @@ class Live2DEngine(arcade.Window):
         self.lock = threading.Lock()
         pub.subscribe(self.notify_face_info, "FaceInfo")
 
-        self.hair_physics = SpringDamper(stiffness=0.01, damping=0.6)
-        self.hair_physics_pendulum = PendulumPhysics(
-            stiffness=0.01, damping=0.6, mass=1.0, gravity_power=1.0
-        )
         self.last_yaw = 0
         self.total_time = 0
         self.camera = arcade.Camera2D()
@@ -60,7 +65,7 @@ class Live2DEngine(arcade.Window):
         yaw, pitch, roll = filterHead(face_info["Pose"])
         face_info["Yaw"] = yaw
         face_info["Pitch"] = pitch
-        face_info["Roll"] = roll
+        face_info["Roll"] = 0
 
     def on_update(self, delta_time):
         with self.lock:
@@ -266,6 +271,6 @@ class TestMesh(arcade.Window):
 if __name__ == "__main__":
     # 載入設定檔
     # game = Live2DEngine(tracker=FakeTracker())
-    # game = MyGame(tracker=AsyncFaceTracker())
-    game = TestMesh()
+    game = Live2DEngine(tracker=AsyncFaceTracker())
+    # game = TestMesh()
     arcade.run()
