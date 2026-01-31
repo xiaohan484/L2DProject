@@ -314,13 +314,26 @@ class PBDCloth2D:
         # Apply correction to the moving particle
         np.add.at(p, self.lra_indices[mask, 0], -corrections)
 
-    def step(self, iterations=8):
+    def step(self, iterations=8, wind_strength=0.0, time_val=0.0):
         # Create a mask to identify points that are "movable"
         moving_mask = self.inv_mass > 0
 
         # --- 1. Prediction stage: Apply gravity and velocity only to movable points ---
         # Initialize predicted position with current position
         p = self.pos.copy()
+
+        # Apply external forces (Gravity + Wind)
+        # Wind: Sinusoidal wave traveling down the hair (y-axis)
+        # Force is primarily in X direction
+        if wind_strength != 0:
+            # Frequency and Wave number can be tuned or passed as args
+            # sin(time * speed + y * scale)
+            wind_force = np.sin(time_val * 3.0 + self.pos[:, 1] * 0.05) * wind_strength
+            # Add random turbulence?
+            # wind_force += (np.random.rand(len(self.pos)) - 0.5) * wind_strength * 0.2
+
+            self.vel[moving_mask, 0] += wind_force[moving_mask] * self.dt
+
         # Update non-fixed points only
         self.vel[moving_mask] += self.gravity * self.dt
         self.vel[moving_mask] *= self.damping

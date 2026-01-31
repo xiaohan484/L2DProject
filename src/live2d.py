@@ -13,6 +13,7 @@ from Const import MODEL_PATH, MODEL_DATA, GLOBAL_SCALE
 from response import *
 from collections import OrderedDict
 import os
+import time
 
 front_shadow_z = 3
 face_feature_z = 2
@@ -38,6 +39,7 @@ PART_HIERARCHY = OrderedDict(
                 "fixed_ratio": 0.4,
                 "damping": 0.99,
                 "lra_stiffness": 0.5,
+                "wind_strength": 10.0,
             },
         ),
         "EyeWhiteL": (face_feature_z, white_response_l, "Face", CFG_GRID),
@@ -65,6 +67,7 @@ PART_HIERARCHY = OrderedDict(
                 "max_area": 500,
                 "simplify_epsilon": 1.0,
                 "lra_stiffness": 0.8,
+                "wind_strength": 20.0,
             },
         ),
         "FrontHairMiddle": (
@@ -173,6 +176,7 @@ def create_live2dpart_each(ctx, name, parent):
             damping=damp,
             lra_stiffness=lra,
         )
+        physics_solver.wind_strength = physics_params.get("wind_strength", 0.0)
 
     else:
         # Standard GridMesh Setup
@@ -400,8 +404,14 @@ class Live2DPart:
             self.physics_solver.pos[fixed_idx] = world_fixed[:, :2]
 
             # 3. Step Physics
-            # TODO: time delta
-            self.physics_solver.step(10)
+            # Pass wind params if defined in self.physics_solver (not stored there directly but can be config derived)
+            # Ideally we store config in Live2DPart or Solver.
+            # For now, let's just use a default or hack it.
+            # In real system, we should have stored 'wind_strength' in the solver object or Part config.
+            # Let's attach 'wind_strength' to the solver object in create logic or Config.
+
+            wind = getattr(self.physics_solver, "wind_strength", 0.0)
+            self.physics_solver.step(10, wind_strength=wind, time_val=time.time())
 
             # 4. Prepare for Rendering (World -> Local)
             # The View (CustomMesh) expects LOCAL coordinates because it is drawn with self.world_matrix.
