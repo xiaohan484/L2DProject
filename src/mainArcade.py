@@ -82,8 +82,8 @@ class TestMesh(arcade.Window):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, "Level 3: Mesh Test")
         arcade.set_background_color(arcade.color.GREEN)
 
-        # name = "FrontHairLeft"
-        name = "FrontHairMiddle"
+        name = "FrontHairLeft"
+        # name = "FrontHairMiddle"
         # name = "BackHair"
         data = MODEL_DATA[name]
         # Assuming filename list has at least one
@@ -271,6 +271,6 @@ class TestMesh(arcade.Window):
 if __name__ == "__main__":
     # 載入設定檔
     # game = Live2DEngine(tracker=FakeTracker())
-    game = Live2DEngine(tracker=AsyncFaceTracker())
-    # game = TestMesh()
+    # game = Live2DEngine(tracker=AsyncFaceTracker())
+    game = TestMesh()
     arcade.run()

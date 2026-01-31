@@ -17,7 +17,9 @@ sys.path.append(str(parent_dir))
 from Const import MODEL_PATH
 
 
-def create_image_mesh(image_path, debug=True):
+def create_image_mesh(
+    image_path, debug=True, max_area=100, min_angle=30, simplify_epsilon=0
+):
     # 1. Load image and convert to grayscale
     # We use OpenCV to detect edges
     img = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
@@ -34,6 +36,11 @@ def create_image_mesh(image_path, debug=True):
 
     # 4. Draw results (Optional)
     max_contour = max(contours, key=cv2.contourArea)
+
+    # Optional: Simplify contour to reduce vertex count (Smoothing)
+    if simplify_epsilon > 0:
+        max_contour = cv2.approxPolyDP(max_contour, simplify_epsilon, True)
+
     # Triangulate
     # 'p': Planar Straight Line Graph (Constrained Delaunay)
     # 'q30': Quality mesh (no angle less than 30 degrees)
@@ -43,7 +50,14 @@ def create_image_mesh(image_path, debug=True):
     n = len(vertices)
     segments = np.array([[i, (i + 1) % n] for i in range(n)])
     input_data = {"vertices": vertices, "segments": segments}
-    mesh = tr.triangulate(input_data, "pq30a100")
+
+    # Construct options string
+    # e.g. "pq30a100"
+    opts = f"pa{max_area}"
+    if min_angle > 0:
+        opts = f"pq{min_angle}a{max_area}"
+
+    mesh = tr.triangulate(input_data, opts)
     pts = mesh["vertices"]
     tris = mesh["triangles"]
     # Plot the mesh
@@ -174,7 +188,9 @@ class PBDCloth2D:
 if __name__ == "__main__":
     # --- 1. Initialize data ---
     # Create a 2D vertical grid
-    pts, tris = create_image_mesh(f"{MODEL_PATH}/FrontHairLeft.png", False)
+    pts, tris = create_image_mesh(
+        f"{MODEL_PATH}/FrontHairLeft.png", False, max_area=500, simplify_epsilon=1.0
+    )
     pts[:, 1] = -pts[:, 1]
     sim = PBDCloth2D(pts, tris)
 
