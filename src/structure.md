@@ -2,6 +2,9 @@
 
 本文件旨在梳理 `src/` 目錄下的程式碼脈絡，供開發者快速查閱功能位於何處，以及如何調用，而無需閱讀完整原始碼。
 
+## Execution Control
+Please use `uv run ...` instead of `python ...` for future control.
+
 ## 目錄結構概覽
 
 - **核心邏輯 (Core Logic)**
