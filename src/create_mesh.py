@@ -82,7 +82,16 @@ def get_edges(tris):
 
 
 class PBDCloth2D:
-    def __init__(self, pts, tris, stiffness=0.1, dt=0.016, fixed_ratio=0.1):
+    def __init__(
+        self,
+        pts,
+        tris,
+        stiffness=0.1,
+        dt=0.016,
+        fixed_ratio=0.1,
+        damping=0.99,
+        lra_stiffness=0.8,
+    ):
         # pts shape: (N, 2)
         self.pos = pts.astype(np.float64)
         self.vel = np.zeros_like(self.pos)
@@ -104,6 +113,8 @@ class PBDCloth2D:
 
         self.dt = dt
         self.gravity = np.array([0.0, -9.8])
+        self.damping = damping
+        self.lra_stiffness = lra_stiffness
 
         # Bending Constraints
         self.bending_stiffness = stiffness * 0.5  # Usually softer than structural
@@ -115,6 +126,34 @@ class PBDCloth2D:
             )
         else:
             self.bending_rest_lengths = np.array([])
+
+        # LRA (Long Range Attachments) Initialization
+        # For each particle, find the closest fixed particle (anchor)
+        # Store (particle_idx, anchor_idx, rest_length)
+        self.lra_indices = []  # List of [particle_idx, anchor_idx]
+        self.lra_rest_lengths = []
+
+        # Only build LRA if we have fixed points
+        if len(self.fixed_indices) > 0:
+            fixed_pos = self.pos[self.fixed_indices]
+            for i in range(len(self.pos)):
+                # Skip if it is a fixed point itself
+                if self.inv_mass[i] == 0:
+                    continue
+
+                # Find closest fixed point
+                dists = np.linalg.norm(fixed_pos - self.pos[i], axis=1)
+                best_fixed_idx = self.fixed_indices[np.argmin(dists)]
+                dist = np.min(dists)
+
+                self.lra_indices.append([i, best_fixed_idx])
+                self.lra_rest_lengths.append(dist)
+
+            self.lra_indices = np.array(self.lra_indices)
+            self.lra_rest_lengths = np.array(self.lra_rest_lengths)
+        else:
+            self.lra_indices = np.array([])
+            self.lra_rest_lengths = np.array([])
 
     def _get_edges(self, tris):
         edges = set()
@@ -230,6 +269,51 @@ class PBDCloth2D:
             if w2 > 0:
                 p[idx2] += w2 * correction
 
+    def _solve_lra_constraints(self, p):
+        if len(self.lra_indices) == 0:
+            return
+
+        # p_i: moving particles, p_a: anchor particles
+        p_i = p[self.lra_indices[:, 0]]
+        p_a = p[self.lra_indices[:, 1]]
+
+        deltas = p_i - p_a
+        dists = np.linalg.norm(deltas, axis=1)
+        dists = np.where(dists < 1e-9, 1e-9, dists)
+
+        # LRA is unilateral: only correct if stretched (current dist > rest dist)
+        # But for hair keeping shape, bilateral (keeping exact distance) might help against curling too?
+        # Standard LRA is usually unilateral (dist > rest).
+        # Let's try bilateral first (dist != rest) to keep structure stronger?
+        # No, bilateral makes it rigid like a stick. Unilateral allows bending but prevents stretching.
+        # But user wants to prevent "curling" (shortening).
+        # Actually, if hair curls up, its distance to root decreases?
+        # Yes! So if we enforce dist >= rest_length, we prevent curling up?
+        # Usually LRA enforces dist <= rest_length (prevent stretch).
+        # To prevent curling up, we would need dist >= rest_length... but that prevents bending up.
+        # Let's start with standard LRA (prevent stretch) as it stabilizes the system generally.
+        # It indirectly helps curling by adding a strong skeleton.
+
+        # We will use Unilateral: Only correct if dist > rest_length
+        mask = dists > self.lra_rest_lengths
+
+        w = self.inv_mass[self.lra_indices[:, 0]]
+        # Anchors have inv_mass 0, so w_sum = w_particle
+
+        # Correction
+        # diff = (dists - rest) / dists
+        # delta_p = -w * diff * deltas (move particle towards anchor)
+
+        diff = (dists[mask] - self.lra_rest_lengths[mask]) / dists[mask]
+        # Stiffness? LRA is usually stiff. Let's use 1.0 or user configurable.
+        # We can use self.stiffness or a separate lra_stiffness.
+        corrections = (diff * self.lra_stiffness * w[mask])[:, np.newaxis] * deltas[
+            mask
+        ]
+
+        # Apply correction to the moving particle
+        np.add.at(p, self.lra_indices[mask, 0], -corrections)
+
     def step(self, iterations=8):
         # Create a mask to identify points that are "movable"
         moving_mask = self.inv_mass > 0
@@ -239,6 +323,7 @@ class PBDCloth2D:
         p = self.pos.copy()
         # Update non-fixed points only
         self.vel[moving_mask] += self.gravity * self.dt
+        self.vel[moving_mask] *= self.damping
         p[moving_mask] += self.vel[moving_mask] * self.dt
         for _ in range(iterations):
             # Structural constraints
@@ -249,6 +334,9 @@ class PBDCloth2D:
             self._solve_constraints_generic(
                 p, self.bending_edges, self.bending_rest_lengths, self.bending_stiffness
             )
+            # LRA Constraints
+            self._solve_lra_constraints(p)
+
         self.vel[moving_mask] = (p[moving_mask] - self.pos[moving_mask]) / self.dt
         self.vel[~moving_mask] = 0.0  # Force velocity of fixed points to 0
 

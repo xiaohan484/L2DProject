@@ -24,7 +24,7 @@ back_hair_z = -1
 CFG_GRID = 0
 CFG_PHYSICS = 1
 
-func_table = OrderedDict(
+PART_HIERARCHY = OrderedDict(
     {
         "Body": (body_base_z, body_response, None, CFG_GRID),
         "Face": (face_base_z, face_response, "Body", CFG_GRID),
@@ -32,8 +32,13 @@ func_table = OrderedDict(
             back_hair_z,
             None,
             "Face",
-            # CFG_GRID,
-            {"type": CFG_PHYSICS, "stiffness": 0.3, "fixed_ratio": 0.4},
+            {
+                "type": CFG_PHYSICS,
+                "stiffness": 0.3,
+                "fixed_ratio": 0.4,
+                "damping": 0.99,
+                "lra_stiffness": 0.5,
+            },
         ),
         "EyeWhiteL": (face_feature_z, white_response_l, "Face", CFG_GRID),
         "EyeWhiteR": (face_feature_z, white_response_r, "Face", CFG_GRID),
@@ -53,14 +58,29 @@ func_table = OrderedDict(
             face_feature_z,
             None,
             "Face",
-            {"type": CFG_PHYSICS, "stiffness": 0.3, "fixed_ratio": 0.3},
+            {
+                "type": CFG_PHYSICS,
+                "stiffness": 0.3,
+                "fixed_ratio": 0.3,
+                "max_area": 500,
+                "simplify_epsilon": 1.0,
+                "lra_stiffness": 0.8,
+            },
         ),
         "FrontHairMiddle": (
             face_feature_z,
             None,
             "Face",
             # CFG_GRID,
-            {"type": CFG_PHYSICS, "stiffness": 0.5, "fixed_ratio": 0.5},
+            {
+                "type": CFG_PHYSICS,
+                "stiffness": 0.3,
+                "fixed_ratio": 0.2,
+                "max_area": 500,
+                "damping": 0.8,
+                "simplify_epsilon": 1.0,
+                "lra_stiffness": 1.0,
+            },
         ),
     }
 )
@@ -80,7 +100,7 @@ def load_local_position(global_pos, parent_global_pos, global_scale):
 
 def create_live2dpart(ctx):
     lives = OrderedDict({})
-    for name, args in func_table.items():
+    for name, args in PART_HIERARCHY.items():
         # Handle 3 or 4 args for robustness, though we updated all to 4
         if len(args) == 4:
             _, _, parent, _ = args
@@ -97,7 +117,7 @@ def create_live2dpart(ctx):
 
 def create_live2dpart_each(ctx, name, parent):
     # Unpack config
-    args = func_table[name]
+    args = PART_HIERARCHY[name]
     z = args[0]
     res = args[1]
 
@@ -125,9 +145,11 @@ def create_live2dpart_each(ctx, name, parent):
         filename = data["filename"][0]  # Assume 1 file for physics parts for now
         image_path = os.path.join(MODEL_PATH, filename)
 
-        # 1. Generate Mesh
+        # 1. Generate Mesh with density params
+        area = physics_params.get("max_area", 500)
+        epsilon = physics_params.get("simplify_epsilon", 1.0)
         pts, tris = create_image_mesh(
-            image_path, debug=False, max_area=500, simplify_epsilon=1.0
+            image_path, debug=False, max_area=area, simplify_epsilon=epsilon
         )
 
         # 2. Create CustomMesh
@@ -140,8 +162,17 @@ def create_live2dpart_each(ctx, name, parent):
         # Extract params with defaults
         stiff = physics_params.get("stiffness", 0.3)
         ratio = physics_params.get("fixed_ratio", 0.1)
+        damp = physics_params.get("damping", 0.99)
+        lra = physics_params.get("lra_stiffness", 0.8)
 
-        physics_solver = PBDCloth2D(sim_pts, tris, stiffness=stiff, fixed_ratio=ratio)
+        physics_solver = PBDCloth2D(
+            sim_pts,
+            tris,
+            stiffness=stiff,
+            fixed_ratio=ratio,
+            damping=damp,
+            lra_stiffness=lra,
+        )
 
     else:
         # Standard GridMesh Setup
