@@ -18,7 +18,7 @@ Unlike standard solutions that rely on Unity or heavy game engines, my goal is t
 * **Signal Processing:** One Euro Filter (for jitter reduction)
 * **Rendering:** [Arcade / ...]
 
-![Demo](assets/demo_preview6.gif)
+![Demo](assets/demo_preview7.gif)
 
 WIP Prototype: Real-time eye blinking and eye tracking driven by live facial landmark data. (Note: Actual face input video is not shown for privacy reasons.)
 

@@ -65,7 +65,7 @@ class Live2DEngine(arcade.Window):
         yaw, pitch, roll = filterHead(face_info["Pose"])
         face_info["Yaw"] = yaw
         face_info["Pitch"] = pitch
-        face_info["Roll"] = 0
+        face_info["Roll"] = roll / 2
 
     def on_update(self, delta_time):
         with self.lock:
