@@ -271,6 +271,6 @@ class TestMesh(arcade.Window):
 if __name__ == "__main__":
     # 載入設定檔
     # game = Live2DEngine(tracker=FakeTracker())
-    # game = Live2DEngine(tracker=AsyncFaceTracker())
-    game = TestMesh()
+    game = Live2DEngine(tracker=AsyncFaceTracker())
+    # game = TestMesh()
     arcade.run()

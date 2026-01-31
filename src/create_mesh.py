@@ -105,6 +105,17 @@ class PBDCloth2D:
         self.dt = dt
         self.gravity = np.array([0.0, -9.8])
 
+        # Bending Constraints
+        self.bending_stiffness = stiffness * 0.5  # Usually softer than structural
+        self.bending_edges = self._get_bending_edges(tris)
+        if len(self.bending_edges) > 0:
+            self.bending_rest_lengths = np.linalg.norm(
+                self.pos[self.bending_edges[:, 0]] - self.pos[self.bending_edges[:, 1]],
+                axis=1,
+            )
+        else:
+            self.bending_rest_lengths = np.array([])
+
     def _get_edges(self, tris):
         edges = set()
         for t in tris:
@@ -112,6 +123,34 @@ class PBDCloth2D:
                 v1, v2 = sorted([t[i], t[(i + 1) % 3]])
                 edges.add((v1, v2))
         return np.array(list(edges))
+
+    def _get_bending_edges(self, tris):
+        # Find adjacent triangles and connect their opposite vertices
+        # 1. Build an edge-to-triangle map
+        edge_to_tris = {}
+        for t_idx, t in enumerate(tris):
+            for i in range(3):
+                v1, v2 = sorted([t[i], t[(i + 1) % 3]])
+                edge = (v1, v2)
+                if edge not in edge_to_tris:
+                    edge_to_tris[edge] = []
+                edge_to_tris[edge].append(
+                    (t_idx, t[(i + 2) % 3])
+                )  # Store tri_idx and opposite vertex
+
+        bending_edges = set()
+        for edge, info in edge_to_tris.items():
+            if len(info) == 2:
+                # Two triangles share this edge -> Interior edge
+                # Connect the two opposite vertices
+                v_op1 = info[0][1]
+                v_op2 = info[1][1]
+                if v_op1 != v_op2:
+                    bending_edges.add(tuple(sorted((v_op1, v_op2))))
+
+        if not bending_edges:
+            return np.array([])
+        return np.array(list(bending_edges))
 
     def _solve_distance_constraints_vectorized(self, p):
         # 1. Fetch all edge endpoint coordinates at once
@@ -145,8 +184,32 @@ class PBDCloth2D:
         # 5. Update positions (tricky part: a single point may belong to multiple edges)
         # Using np.add.at safely accumulates multiple corrections to the same point
         # print(corrections)
-        np.add.at(p, self.edges[:, 0], -w1[:, np.newaxis] * corrections)
-        np.add.at(p, self.edges[:, 1], w2[:, np.newaxis] * corrections)
+        np.add.at(p, edges[:, 0], -w1[:, np.newaxis] * corrections)
+        np.add.at(p, edges[:, 1], w2[:, np.newaxis] * corrections)
+
+    def _solve_constraints_generic(self, p, edges, rest_lengths, stiffness):
+        if len(edges) == 0:
+            return
+
+        p1 = p[edges[:, 0]]
+        p2 = p[edges[:, 1]]
+
+        deltas = p1 - p2
+        dists = np.linalg.norm(deltas, axis=1)
+        dists = np.where(dists < 1e-9, 1e-9, dists)
+
+        w1 = self.inv_mass[edges[:, 0]]
+        w2 = self.inv_mass[edges[:, 1]]
+        w_sum = w1 + w2
+
+        mask = w_sum > 0
+
+        # Calculate corrections
+        diff = (dists[mask] - rest_lengths[mask]) / dists[mask] * stiffness
+        corrections = (diff / w_sum[mask])[:, np.newaxis] * deltas[mask]
+
+        np.add.at(p, edges[mask, 0], -w1[mask][:, np.newaxis] * corrections)
+        np.add.at(p, edges[mask, 1], w2[mask][:, np.newaxis] * corrections)
 
     def _solve_distance_constraints(self, p):
         for i, (idx1, idx2) in enumerate(self.edges):
@@ -178,7 +241,14 @@ class PBDCloth2D:
         self.vel[moving_mask] += self.gravity * self.dt
         p[moving_mask] += self.vel[moving_mask] * self.dt
         for _ in range(iterations):
-            self._solve_distance_constraints_vectorized(p)
+            # Structural constraints
+            self._solve_constraints_generic(
+                p, self.edges, self.rest_lengths, self.stiffness
+            )
+            # Bending constraints
+            self._solve_constraints_generic(
+                p, self.bending_edges, self.bending_rest_lengths, self.bending_stiffness
+            )
         self.vel[moving_mask] = (p[moving_mask] - self.pos[moving_mask]) / self.dt
         self.vel[~moving_mask] = 0.0  # Force velocity of fixed points to 0
 
@@ -236,7 +306,7 @@ if __name__ == "__main__":
 
         start_sim = time.perf_counter()
         for _ in range(2):
-            sim.step(1)
+            sim.step()
         end_sim = time.perf_counter()
         print(sim.pos[fixed_mask])
 

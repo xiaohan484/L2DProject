@@ -126,7 +126,9 @@ def create_live2dpart_each(ctx, name, parent):
         image_path = os.path.join(MODEL_PATH, filename)
 
         # 1. Generate Mesh
-        pts, tris = create_image_mesh(image_path, debug=False)
+        pts, tris = create_image_mesh(
+            image_path, debug=False, max_area=500, simplify_epsilon=1.0
+        )
 
         # 2. Create CustomMesh
         view = CustomMesh(ctx, image_path, pts, tris, scale=GLOBAL_SCALE)
