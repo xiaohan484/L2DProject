@@ -10,6 +10,7 @@ Please use `uv run ...` instead of `python ...` for future control.
 - **核心邏輯 (Core Logic)**
     - `mainArcade.py`: 程式入口，負責視窗管理、主迴圈、整合各模組。
     - `live2d.py`: 定義 Live2D 模型部件 (Live2DPart) 的層級結構與矩陣更新邏輯。
+    - `deformer.py`: 處理非線性頂點變形 (Non-Linear Vertex Deformation) 以模擬頭部轉動的立體感 (Yaw/Pitch)。
     - `Const.py`: 全域常數設定。
 
 - **渲染與網格 (Rendering & Mesh)**
@@ -63,6 +64,21 @@ Please use `uv run ...` instead of `python ...` for future control.
         - 若配置了物理求解器 (`physics_solver`)，會在 World Space 進行物理模擬並更新 Mesh。
     - **`sync(self)`**: 將計算好的 World Matrix 同步給渲染層 (`views`).
     - **`draw(self)`**: 呼叫渲染層進行繪製。
+    - **`NonLinearParallaxDeformer`**: (Defined in `deformer.py` but used here)
+        - **用途**: 計算非線性頂點變形。
+        - **`get_deformed_vertices(yaw, pitch)`**: 輸入旋轉角度，回傳變形後的頂點。
+        - **`get_deformed_point(point, yaw, pitch)`**: 輸入單點座標，回傳變形後的座標 (用於子物件定位)。
+
+### 2.1 `deformer.py` (Deformation Logic)
+獨立的變形算法模組。
+
+#### Classes
+- **`NonLinearParallaxDeformer`**
+    - **`__init__(self, pts, radius_scale)`**: 初始化變形器，計算網格半徑與權重 (Weights)。
+    - **原理**:
+        - **Bulge**: 中心點移動量大，邊緣移動量小 (Parallax)。
+        - **Squash/Stretch**: 根據旋轉方向壓縮遠端、拉伸近端 (Perspective)。
+    - **權重公式**: $1 - (r/R)^3$。
 
 ### 3. `mesh_renderer.py` (Rendering)
 處理底層 OpenGL 繪圖。

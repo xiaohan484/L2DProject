@@ -9,6 +9,7 @@ try:
 except ImportError:
     pass
 from create_mesh import create_image_mesh, PBDCloth2D
+from deformer import NonLinearParallaxDeformer
 from Const import MODEL_PATH, MODEL_DATA, GLOBAL_SCALE
 from response import *
 from collections import OrderedDict
@@ -24,82 +25,88 @@ back_hair_z = -1
 # Config types
 CFG_GRID = 0
 CFG_PHYSICS = 1
+CFG_FACE_DEFORM = 2
 
 PART_HIERARCHY = OrderedDict(
     {
         "Body": (body_base_z, body_response, None, CFG_GRID),
-        "Face": (face_base_z, face_response, "Body", CFG_GRID),
-        "BackHair": (
-            back_hair_z,
-            None,
-            "Face",
-            {
-                "type": CFG_PHYSICS,
-                "stiffness": 0.3,
-                "fixed_ratio": 0.2,
-                "damping": 0.99,
-                "lra_stiffness": 0.1,
-                "wind_strength": 30.0,
-            },
+        "Face": (
+            face_base_z,
+            face_response,
+            "Body",
+            {"type": CFG_FACE_DEFORM, "max_area": 500},
         ),
-        "EyeWhiteL": (face_feature_z, white_response_l, "Face", CFG_GRID),
-        "EyeWhiteR": (face_feature_z, white_response_r, "Face", CFG_GRID),
-        "EyePupilL": (face_feature_z, pupils_response_l, "Face", CFG_GRID),
-        "EyePupilR": (face_feature_z, pupils_response_r, "Face", CFG_GRID),
-        "FaceLandmark": (face_feature_z, None, "Face", CFG_GRID),
-        "EyeLidL": (face_feature_z, lid_response_l, "Face", CFG_GRID),
-        "EyeLidR": (face_feature_z, lid_response_r, "Face", CFG_GRID),
-        "EyeLashL": (face_feature_z, lash_response_l, "Face", CFG_GRID),
-        "EyeLashR": (face_feature_z, lash_response_r, "Face", CFG_GRID),
-        "EyeBrowL": (face_feature_z, None, "Face", CFG_GRID),
-        "EyeBrowR": (face_feature_z, None, "Face", CFG_GRID),
-        "Mouth": (face_feature_z, mouth_response, "Face", CFG_GRID),
-        "FrontHairShadowLeft": (front_shadow_z, None, "Face", CFG_GRID),
-        "FrontHairShadowMiddle": (front_shadow_z, None, "Face", CFG_GRID),
-        "FrontHairLeft": (
-            face_feature_z,
-            None,
-            "Face",
-            {
-                "type": CFG_PHYSICS,
-                "stiffness": 0.3,
-                "fixed_ratio": 0.3,
-                "max_area": 500,
-                "simplify_epsilon": 1.0,
-                "lra_stiffness": 0.8,
-                "wind_strength": 50.0,
-            },
-        ),
-        "FrontHairRight": (
-            face_feature_z,
-            None,
-            "Face",
-            {
-                "type": CFG_PHYSICS,
-                "stiffness": 0.3,
-                "fixed_ratio": 0.3,
-                "max_area": 500,
-                "simplify_epsilon": 1.0,
-                "lra_stiffness": 0.8,
-                "wind_strength": 50.0,
-            },
-        ),
-        "FrontHairMiddle": (
-            face_feature_z,
-            None,
-            "Face",
-            # CFG_GRID,
-            {
-                "type": CFG_PHYSICS,
-                "stiffness": 0.3,
-                "fixed_ratio": 0.2,
-                "max_area": 500,
-                "damping": 0.8,
-                "simplify_epsilon": 1.0,
-                "lra_stiffness": 1.0,
-                "wind_strength": 20.0,
-            },
-        ),
+        # "BackHair": (
+        #    back_hair_z,
+        #    None,
+        #    "Face",
+        #    {
+        #        "type": CFG_PHYSICS,
+        #        "stiffness": 0.3,
+        #        "fixed_ratio": 0.2,
+        #        "damping": 0.99,
+        #        "lra_stiffness": 0.1,
+        #        "wind_strength": 30.0,
+        #    },
+        # ),
+        # "EyeWhiteL": (face_feature_z, white_response_l, "Face", CFG_GRID),
+        # "EyeWhiteR": (face_feature_z, white_response_r, "Face", CFG_GRID),
+        # "EyePupilL": (face_feature_z, pupils_response_l, "Face", CFG_GRID),
+        # "EyePupilR": (face_feature_z, pupils_response_r, "Face", CFG_GRID),
+        # "FaceLandmark": (face_feature_z, None, "Face", CFG_GRID),
+        # "EyeLidL": (face_feature_z, lid_response_l, "Face", CFG_GRID),
+        # "EyeLidR": (face_feature_z, lid_response_r, "Face", CFG_GRID),
+        # "EyeLashL": (face_feature_z, lash_response_l, "Face", CFG_GRID),
+        # "EyeLashR": (face_feature_z, lash_response_r, "Face", CFG_GRID),
+        # "EyeBrowL": (face_feature_z, None, "Face", CFG_GRID),
+        # "EyeBrowR": (face_feature_z, None, "Face", CFG_GRID),
+        # "Mouth": (face_feature_z, mouth_response, "Face", CFG_GRID),
+        # "FrontHairShadowLeft": (front_shadow_z, None, "Face", CFG_GRID),
+        # "FrontHairShadowMiddle": (front_shadow_z, None, "Face", CFG_GRID),
+        # "FrontHairLeft": (
+        #    face_feature_z,
+        #    None,
+        #    "Face",
+        #    {
+        #        "type": CFG_PHYSICS,
+        #        "stiffness": 0.3,
+        #        "fixed_ratio": 0.3,
+        #        "max_area": 500,
+        #        "simplify_epsilon": 1.0,
+        #        "lra_stiffness": 0.8,
+        #        "wind_strength": 50.0,
+        #    },
+        # ),
+        # "FrontHairRight": (
+        #    face_feature_z,
+        #    None,
+        #    "Face",
+        #    {
+        #        "type": CFG_PHYSICS,
+        #        "stiffness": 0.3,
+        #        "fixed_ratio": 0.3,
+        #        "max_area": 500,
+        #        "simplify_epsilon": 1.0,
+        #        "lra_stiffness": 0.8,
+        #        "wind_strength": 50.0,
+        #    },
+        # ),
+        # "FrontHairMiddle": (
+        #    face_feature_z,
+        #    None,
+        #    "Face",
+        #    # CFG_GRID,
+        #    {
+        #        "type": CFG_PHYSICS,
+        #        "stiffness": 0.3,
+        #        "fixed_ratio": 0.2,
+        #        "max_area": 500,
+        #        "damping": 0.8,
+        #        "simplify_epsilon": 1.0,
+        #        "lra_stiffness": 1.0,
+        #        "wind_strength": 20.0,
+        #    },
+        # ),
     }
 )
 
@@ -129,7 +136,8 @@ def create_live2dpart(ctx):
             parent = lives[parent]
         lives[name] = create_live2dpart_each(ctx, name, parent)
     root = lives["Body"]
-    lives.move_to_end("BackHair", last=False)
+    if "BackHair" in lives:
+        lives.move_to_end("BackHair", last=False)
     return lives, root
 
 
@@ -210,6 +218,84 @@ def create_live2dpart_each(ctx, name, parent):
             data_key=data,  # 10x10 的格子
         )
 
+    view = None
+    physics_solver = None
+    deformer = None
+
+    if config_type == CFG_PHYSICS:
+        # PBD Physics Setup
+        filename = data["filename"][0]  # Assume 1 file for physics parts for now
+        image_path = os.path.join(MODEL_PATH, filename)
+
+        # 1. Generate Mesh with density params
+        area = physics_params.get("max_area", 500)
+        epsilon = physics_params.get("simplify_epsilon", 1.0)
+        pts, tris = create_image_mesh(
+            image_path, debug=False, max_area=area, simplify_epsilon=epsilon
+        )
+
+        # 2. Create CustomMesh
+        view = CustomMesh(ctx, image_path, pts, tris, scale=GLOBAL_SCALE)
+
+        # 3. Initialize Physics
+        render_verts = view.original_vertices.reshape(-1, 4)[:, :2]
+        sim_pts = render_verts.copy()
+
+        # Extract params with defaults
+        stiff = physics_params.get("stiffness", 0.3)
+        ratio = physics_params.get("fixed_ratio", 0.1)
+        damp = physics_params.get("damping", 0.99)
+        lra = physics_params.get("lra_stiffness", 0.8)
+
+        physics_solver = PBDCloth2D(
+            sim_pts,
+            tris,
+            stiffness=stiff,
+            fixed_ratio=ratio,
+            damping=damp,
+            lra_stiffness=lra,
+        )
+        physics_solver.wind_strength = physics_params.get("wind_strength", 0.0)
+
+    elif config_type == CFG_FACE_DEFORM:
+        # 2.5D Face Deformation Setup
+        filename = data["filename"][0]
+        image_path = os.path.join(MODEL_PATH, filename)
+
+        # 1. Mesh
+        area = physics_params.get("max_area", 500)
+        pts, tris = create_image_mesh(
+            image_path, debug=False, max_area=area, simplify_epsilon=1.0
+        )
+
+        # 2. CustomMesh (for rendering)
+        view = CustomMesh(ctx, image_path, pts, tris, scale=GLOBAL_SCALE)
+
+        # 3. Deformer
+        # We need to operate on the "Render Vertices" (which are scaled/centered by CustomMesh)
+        # CustomMesh stores original_vertices as (N, 4) [x, y, 0, 1]
+        render_verts = view.original_vertices.reshape(-1, 4)[:, :2]
+
+        # Initialize Deformer
+        deformer = NonLinearParallaxDeformer(render_verts)
+
+    else:
+        # Standard GridMesh Setup
+        textures = {}
+        for path in data["filename"]:
+            filepath = os.path.join("assets/sample_model/processed", path)
+            p = path.removesuffix(".png")
+            textures[p] = filepath
+
+        view = GridMesh(
+            ctx,
+            textures,
+            grid_size=(10, 10),
+            scale=GLOBAL_SCALE,
+            parent=None,
+            data_key=data,  # 10x10 的格子
+        )
+
     if parent == None:
         return Live2DPart(
             name=name,
@@ -223,6 +309,7 @@ def create_live2dpart_each(ctx, name, parent):
             view=view,
             response=res,
             physics_solver=physics_solver,
+            deformer=deformer,
         )
     else:
         parent_global = (
@@ -246,6 +333,7 @@ def create_live2dpart_each(ctx, name, parent):
             view=view,
             response=res,
             physics_solver=physics_solver,
+            deformer=deformer,
         )
 
 
@@ -310,6 +398,7 @@ class Live2DPart:
         view=None,
         response=None,
         physics_solver=None,
+        deformer=None,
     ):
         self.name = name
         # Local space properties
@@ -323,6 +412,7 @@ class Live2DPart:
         self.parent = parent
         self.response = response
         self.physics_solver = physics_solver
+        self.deformer = deformer
         self.physics_initialized = False
         if self.physics_solver is not None:
             self.physics_init_local_pos = self.physics_solver.pos.copy()
@@ -364,18 +454,79 @@ class Live2DPart:
         skip = data is None or self.response is None
         if skip is False:
             self.response(self, data)
+
+        # 0. Get Data
+        yaw = 0
+        normalized_yaw = 0.0
+        pitch = 0
+        normalized_pitch = 0.0
+
         if data is not None:
-            (offset_x, offset_y) = rotate_response[self.z_depth]
-            yaw = data["Yaw"]
-            pitch = data["Pitch"]
-            offset_x *= yaw
-            offset_y *= -pitch
+            # yaw is in degrees from tracker (e.g. -30 to 30)
+            yaw = data.get("Yaw", 0)
+            pitch = data.get("Pitch", 0)
+
+            # Normalize to -1.0 ~ 1.0 for the deformer
+            # Assume 45 degrees is the max reasonable rotation
+            normalized_yaw = np.clip(yaw / 45.0, -1.5, 1.5)
+            normalized_pitch = np.clip(pitch / 45.0, -1.5, 1.5)
+
+        # 1. Calculate Offsets (Parallax vs Deformation)
+        (offset_p_x, offset_p_y) = (0, 0)
+
+        if self.deformer is not None:
+            # Case A: Self is a Deformable Face
+            # 1. Deform Mesh Vertices
+            new_verts = self.deformer.get_deformed_vertices(
+                normalized_yaw, normalized_pitch
+            )
+
+            # Update View Buffer
+            if hasattr(self.views, "current_vertices"):
+                data_view = self.views.current_vertices.reshape(-1, 4)
+                data_view[:, :2] = new_verts[:, :2]
+                self.views.update_buffer()
+
+            # 2. Skip Parallax for self (Deformation handles it)
+            pass
+
+        elif data is not None:
+            # Case B: Standard Parallax
+            (offset_p_x, offset_p_y) = rotate_response[self.z_depth]
+            offset_p_x *= yaw
+            offset_p_y *= -pitch
+
+        # 2. Calculate Local Matrix
+
+        # Handle Parent Deformation (Surface Attachment)
+        # If my parent is the Face (has deformer), my (x, y) should follow the surface.
+        eff_x = self.x + self.add_x
+        eff_y = self.y + self.add_y
+
+        if self.parent and self.parent.deformer:
+            # Transform my relative position using parent's deformer
+            # Note: My (x, y) implies a position relative to parent center.
+            deformed_pos = self.parent.deformer.get_deformed_point(
+                [eff_x, eff_y], normalized_yaw, normalized_pitch
+            )
+            eff_x = deformed_pos[0]
+            # eff_y = deformed_pos[1] # Y is usually unchanged in cylindrical, but good to keep general
+
+            # Since we are attached to the surface, we DO NOT add parallax offset
+            # because the surface itself has moved (deformed).
+            # However, rotate_response might still be adding offset_x...
+            # We should probably invalid offset_p_x if we are attached to a deformed surface?
+            # Creating a hybrid: Vertical parallax (Pitch) OK, Horizontal (Yaw) handled by attachment.
+
+            # Reset X Parallax if attached to deformed surface
+            offset_p_x = 0
+
         self.local_matrix = get_local_matrix(
             self.angle,
             self.sx,
             self.sy,
-            self.x + self.add_x + offset_x,
-            self.y + self.add_y + offset_y,
+            eff_x + offset_p_x,
+            eff_y + offset_p_y,
         )
         if self.parent:
             self.world_matrix = self.parent.world_matrix @ self.local_matrix

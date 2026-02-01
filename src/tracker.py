@@ -1,4 +1,5 @@
 import time
+import os
 import threading
 import numpy as np
 import cv2
@@ -101,7 +102,9 @@ class FaceTracker:
         self.mp_face_mesh = mp.solutions.face_mesh
         # refine_landmarks=True 是關鍵，這樣才會回傳瞳孔(Iris)的座標
         base_options = python.BaseOptions(
-            model_asset_path="mediapipe_model/face_landmarker.task"
+            model_asset_path=os.path.join(
+                os.path.dirname(__file__), "../mediapipe_model/face_landmarker.task"
+            )
         )
         options = vision.FaceLandmarkerOptions(
             base_options=base_options,
