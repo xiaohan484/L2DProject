@@ -36,31 +36,31 @@ PART_HIERARCHY = OrderedDict(
             "Body",
             {"type": CFG_FACE_DEFORM, "max_area": 500},
         ),
-        # "BackHair": (
-        #    back_hair_z,
-        #    None,
-        #    "Face",
-        #    {
-        #        "type": CFG_PHYSICS,
-        #        "stiffness": 0.3,
-        #        "fixed_ratio": 0.2,
-        #        "damping": 0.99,
-        #        "lra_stiffness": 0.1,
-        #        "wind_strength": 30.0,
-        #    },
-        # ),
-        # "EyeWhiteL": (face_feature_z, white_response_l, "Face", CFG_GRID),
-        # "EyeWhiteR": (face_feature_z, white_response_r, "Face", CFG_GRID),
-        # "EyePupilL": (face_feature_z, pupils_response_l, "Face", CFG_GRID),
-        # "EyePupilR": (face_feature_z, pupils_response_r, "Face", CFG_GRID),
-        # "FaceLandmark": (face_feature_z, None, "Face", CFG_GRID),
-        # "EyeLidL": (face_feature_z, lid_response_l, "Face", CFG_GRID),
-        # "EyeLidR": (face_feature_z, lid_response_r, "Face", CFG_GRID),
-        # "EyeLashL": (face_feature_z, lash_response_l, "Face", CFG_GRID),
-        # "EyeLashR": (face_feature_z, lash_response_r, "Face", CFG_GRID),
-        # "EyeBrowL": (face_feature_z, None, "Face", CFG_GRID),
-        # "EyeBrowR": (face_feature_z, None, "Face", CFG_GRID),
-        # "Mouth": (face_feature_z, mouth_response, "Face", CFG_GRID),
+        "BackHair": (
+            back_hair_z,
+            None,
+            "Face",
+            {
+                "type": CFG_PHYSICS,
+                "stiffness": 0.3,
+                "fixed_ratio": 0.2,
+                "damping": 0.99,
+                "lra_stiffness": 0.1,
+                "wind_strength": 30.0,
+            },
+        ),
+        "EyeWhiteL": (face_feature_z, white_response_l, "Face", CFG_GRID),
+        "EyeWhiteR": (face_feature_z, white_response_r, "Face", CFG_GRID),
+        "EyePupilL": (face_feature_z, pupils_response_l, "Face", CFG_GRID),
+        "EyePupilR": (face_feature_z, pupils_response_r, "Face", CFG_GRID),
+        "FaceLandmark": (face_feature_z, None, "Face", CFG_GRID),
+        "EyeLidL": (face_feature_z, lid_response_l, "Face", CFG_GRID),
+        "EyeLidR": (face_feature_z, lid_response_r, "Face", CFG_GRID),
+        "EyeLashL": (face_feature_z, lash_response_l, "Face", CFG_GRID),
+        "EyeLashR": (face_feature_z, lash_response_r, "Face", CFG_GRID),
+        "EyeBrowL": (face_feature_z, None, "Face", CFG_GRID),
+        "EyeBrowR": (face_feature_z, None, "Face", CFG_GRID),
+        "Mouth": (face_feature_z, mouth_response, "Face", CFG_GRID),
         # "FrontHairShadowLeft": (front_shadow_z, None, "Face", CFG_GRID),
         # "FrontHairShadowMiddle": (front_shadow_z, None, "Face", CFG_GRID),
         # "FrontHairLeft": (
@@ -351,13 +351,13 @@ def get_local_matrix(angle, sx, sy, tx, ty):
 
 
 PARALLAX_X_STRENGTH = -0.4
-PARALLAX_Y_STRENGTH = 0.5
+PARALLAX_Y_STRENGTH = 2
 
 # Body is zero
 
 # Face is Base of other feature
 OFFSET_MID = 1.0  # 臉型
-OFFSET_BACK = 0.9999  # 後髮
+OFFSET_BACK = 0.5  # 後髮
 OFFSET_FRONT = 1.0001  # 前髮、五官
 OFFSET_FRONT_SHADOW = 0.5
 
@@ -373,8 +373,8 @@ rotate_response = {
     face_base_z: (PARALLAX_X_STRENGTH * OFFSET_MID, PARALLAX_Y_STRENGTH * OFFSET_MID),
     body_base_z: (0, 0),
     back_hair_z: (
-        PARALLAX_X_STRENGTH * OFFSET_BACK,
-        PARALLAX_Y_STRENGTH * OFFSET_BACK,
+        PARALLAX_X_STRENGTH * OFFSET_BACK * 10,
+        -PARALLAX_Y_STRENGTH * OFFSET_BACK,
     ),
 }
 
@@ -519,7 +519,8 @@ class Live2DPart:
             # Creating a hybrid: Vertical parallax (Pitch) OK, Horizontal (Yaw) handled by attachment.
 
             # Reset X Parallax if attached to deformed surface
-            offset_p_x = 0
+            # offset_p_x = 0
+            # offset_p_y = 0
 
         self.local_matrix = get_local_matrix(
             self.angle,
