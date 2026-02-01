@@ -360,7 +360,7 @@ if __name__ == "__main__":
     # --- 1. Initialize data ---
     # Create a 2D vertical grid
     pts, tris = create_image_mesh(
-        f"{MODEL_PATH}/FrontHairLeft.png", False, max_area=500, simplify_epsilon=1.0
+        f"{MODEL_PATH}/FaceLandmark.png", False, max_area=500, simplify_epsilon=1.0
     )
     pts[:, 1] = -pts[:, 1]
     sim = PBDCloth2D(pts, tris)

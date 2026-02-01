@@ -36,30 +36,30 @@ PART_HIERARCHY = OrderedDict(
             "Body",
             {"type": CFG_FACE_DEFORM, "max_area": 500},
         ),
-        "BackHair": (
-            back_hair_z,
-            None,
-            "Face",
-            {
-                "type": CFG_PHYSICS,
-                "stiffness": 0.3,
-                "fixed_ratio": 0.2,
-                "damping": 0.99,
-                "lra_stiffness": 0.1,
-                "wind_strength": 30.0,
-            },
-        ),
-        "EyeWhiteL": (face_feature_z, white_response_l, "Face", CFG_GRID),
-        "EyeWhiteR": (face_feature_z, white_response_r, "Face", CFG_GRID),
-        "EyePupilL": (face_feature_z, pupils_response_l, "Face", CFG_GRID),
-        "EyePupilR": (face_feature_z, pupils_response_r, "Face", CFG_GRID),
-        "FaceLandmark": (face_feature_z, None, "Face", CFG_GRID),
-        "EyeLidL": (face_feature_z, lid_response_l, "Face", CFG_GRID),
-        "EyeLidR": (face_feature_z, lid_response_r, "Face", CFG_GRID),
-        "EyeLashL": (face_feature_z, lash_response_l, "Face", CFG_GRID),
-        "EyeLashR": (face_feature_z, lash_response_r, "Face", CFG_GRID),
-        "EyeBrowL": (face_feature_z, None, "Face", CFG_GRID),
-        "EyeBrowR": (face_feature_z, None, "Face", CFG_GRID),
+        # "BackHair": (
+        #    back_hair_z,
+        #    None,
+        #    "Face",
+        #    {
+        #        "type": CFG_PHYSICS,
+        #        "stiffness": 0.3,
+        #        "fixed_ratio": 0.2,
+        #        "damping": 0.99,
+        #        "lra_stiffness": 0.1,
+        #        "wind_strength": 30.0,
+        #    },
+        # ),
+        # "EyeWhiteL": (face_feature_z, white_response_l, "Face", CFG_GRID),
+        # "EyeWhiteR": (face_feature_z, white_response_r, "Face", CFG_GRID),
+        # "EyePupilL": (face_feature_z, pupils_response_l, "Face", CFG_GRID),
+        # "EyePupilR": (face_feature_z, pupils_response_r, "Face", CFG_GRID),
+        # "FaceLandmark": (face_feature_z, None, "Face", CFG_GRID),
+        # "EyeLidL": (face_feature_z, lid_response_l, "Face", CFG_GRID),
+        # "EyeLidR": (face_feature_z, lid_response_r, "Face", CFG_GRID),
+        # "EyeLashL": (face_feature_z, lash_response_l, "Face", CFG_GRID),
+        # "EyeLashR": (face_feature_z, lash_response_r, "Face", CFG_GRID),
+        # "EyeBrowL": (face_feature_z, None, "Face", CFG_GRID),
+        # "EyeBrowR": (face_feature_z, None, "Face", CFG_GRID),
         "Mouth": (face_feature_z, mouth_response, "Face", CFG_GRID),
         # "FrontHairShadowLeft": (front_shadow_z, None, "Face", CFG_GRID),
         # "FrontHairShadowMiddle": (front_shadow_z, None, "Face", CFG_GRID),
@@ -277,7 +277,8 @@ def create_live2dpart_each(ctx, name, parent):
         render_verts = view.original_vertices.reshape(-1, 4)[:, :2]
 
         # Initialize Deformer
-        deformer = NonLinearParallaxDeformer(render_verts)
+        # Force center to (0,0) because CustomMesh centers vertices around the pivot (anchor).
+        deformer = NonLinearParallaxDeformer(render_verts, center=(0, 0))
 
     else:
         # Standard GridMesh Setup
@@ -367,8 +368,10 @@ rotate_response = {
         4 * PARALLAX_Y_STRENGTH * OFFSET_FRONT_SHADOW,
     ),
     face_feature_z: (
-        PARALLAX_X_STRENGTH * OFFSET_FRONT,
-        PARALLAX_Y_STRENGTH * OFFSET_FRONT,
+        0,
+        0,
+        # PARALLAX_X_STRENGTH * OFFSET_FRONT,
+        # PARALLAX_Y_STRENGTH * OFFSET_FRONT,
     ),
     face_base_z: (PARALLAX_X_STRENGTH * OFFSET_MID, PARALLAX_Y_STRENGTH * OFFSET_MID),
     body_base_z: (0, 0),
@@ -405,6 +408,12 @@ class Live2DPart:
         self.z_depth = z  # For parallax
 
         self.angle = angle
+        self.sx = scale_x
+        self.sy = scale_y
+        self.x = x
+        self.angle = angle
+        self.base_sx = scale_x
+        self.base_sy = scale_y
         self.sx = scale_x
         self.sy = scale_y
         self.x = x
@@ -454,6 +463,10 @@ class Live2DPart:
         skip = data is None or self.response is None
         if skip is False:
             self.response(self, data)
+
+        # Reset Scale to Base
+        self.sx = self.base_sx
+        self.sy = self.base_sy
 
         # 0. Get Data
         yaw = 0
@@ -505,22 +518,40 @@ class Live2DPart:
 
         if self.parent and self.parent.deformer:
             # Transform my relative position using parent's deformer
-            # Note: My (x, y) implies a position relative to parent center.
-            deformed_pos = self.parent.deformer.get_deformed_point(
+            # Note: My (x, y) are Local Position relative to Parent.
+            # Does deformer work in Local Parent Space?
+            # Yes, `deformer` is created from Parent's Vertices (view.original_vertices).
+            # If those vertices are in Parent Local Space (usually centered?), then this works.
+
+            # 1. Transform the Anchor Point (offset)
+            print(eff_x, eff_y)
+            deformed_pos, scales = self.parent.deformer.transform_points(
                 [eff_x, eff_y], normalized_yaw, normalized_pitch
             )
+            deformed_pos = deformed_pos[0]
+            scales = scales[0]
+
             eff_x = deformed_pos[0]
-            # eff_y = deformed_pos[1] # Y is usually unchanged in cylindrical, but good to keep general
+            eff_y = deformed_pos[1]  # Update Y as well for curvature
+
+            # Apply Deformation Scaling (Squash/Stretch) to the child sprite
+            # Multiply existing scale by the deformation scale factors
+            self.sx *= scales[0]
+            self.sy *= scales[1]
 
             # Since we are attached to the surface, we DO NOT add parallax offset
             # because the surface itself has moved (deformed).
-            # However, rotate_response might still be adding offset_x...
-            # We should probably invalid offset_p_x if we are attached to a deformed surface?
-            # Creating a hybrid: Vertical parallax (Pitch) OK, Horizontal (Yaw) handled by attachment.
+            # Parallax is for "sliding on top of", Deformation is "embedded in".
+            # Exception: Objects that protrude significantly (Nose) might still need parallax?
+            # For pure surface features (Eyes, Mouth), disabled parallax is correct.
 
-            # Reset X Parallax if attached to deformed surface
-            # offset_p_x = 0
-            # offset_p_y = 0
+            offset_p_x = 0
+            offset_p_y = 0
+
+            if self.name == "FaceLandmark":
+                print(
+                    f"[FaceLandmark] Deformed pos: ({eff_x:.1f}, {eff_y:.1f}) Scale: ({self.sx:.2f}, {self.sy:.2f})"
+                )
 
         self.local_matrix = get_local_matrix(
             self.angle,

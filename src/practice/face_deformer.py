@@ -7,175 +7,149 @@ import os
 from pathlib import Path
 
 # Setup paths to import from src
-# Assuming this script is in e:\Live2DProject\src\practice\face_deformer.py
-# create_mesh is in e:\Live2DProject\src\create_mesh.py
 current_dir = Path(__file__).resolve().parent
 src_dir = current_dir.parent
 sys.path.append(str(src_dir))
 
 from create_mesh import create_image_mesh
-from Const import MODEL_PATH
-
-
-def deform_mesh(pts, yaw, radius=None):
-    """
-    Non-Linear Vertex Deformation for Head Rotation.
-    """
-    # 1. Centering
-    min_vals = pts.min(axis=0)
-    max_vals = pts.max(axis=0)
-    center = (min_vals + max_vals) / 2.0
-    centered_pts = pts - center
-
-    xs = centered_pts[:, 0]
-    ys = centered_pts[:, 1]
-
-    # 2. Radius & Weights
-    if radius is None:
-        width = max_vals[0] - min_vals[0]
-        # Use a slightly loose radius to ensure edges don't clamp too abruptly
-        calc_radius = (width / 2.0) * 1.2
-    else:
-        calc_radius = radius
-
-    if calc_radius == 0:
-        return pts
-
-    dists = np.sqrt(xs**2 + ys**2)
-    norm_dists = dists / calc_radius
-    norm_dists = np.clip(norm_dists, 0.0, 1.0)
-
-    # Weight Function:
-    # Previous: Cosine (Round peak).
-    # New: Flattened Peak (Plateau).
-    # This keeps the central face (eyes/nose/mouth) moving more rigidly together,
-    # pushing the distortion to the edges.
-    # Exponent higher = Flatter center, sharper drop at edge.
-    vis_param_power = 3.0
-    weights = 1.0 - (norm_dists**vis_param_power)
-
-    # 3. Displacement (Parallax Bulge)
-    # Reduced sensitivity to avoid over-protrusion
-    sensitivity = 60.0  # Pixels
-    dx = yaw * weights * sensitivity
-
-    # 4. Asymmetric Compression (Perspective Trick)
-    # Simulate foreshortening on the "far" side.
-    # Yaw < 0 (Look Left) -> Left side (x < 0) is Far -> Compress.
-    # Formula: s = 1.0 - Yaw * Strength * (x / R)
-    # Check: Yaw=-1, x=-R -> s = 1 - (-1)*K*(-1) = 1 - K (Compress).
-
-    compression_strength = 0.4  # Tune this (0.0 to 1.0)
-
-    # Normalize X for compression gradient (-1 to 1)
-    # Use current xs or displaced xs?
-    # Usually better to use original positions for stable gradient.
-    x_norm_signed = xs / calc_radius
-    x_norm_signed = np.clip(x_norm_signed, -1.0, 1.0)
-
-    scale_factor = 1.0 + (yaw * compression_strength * x_norm_signed)
-    # Note: "+" because we want Yaw(-1)*x(-1) to be Positive to INCREASE scale?
-    # User said: "Left side should scale closer together (Compress)".
-    # Compress means distance between points gets smaller.
-    # If I multiply position by 0.8, the whole grid shrinks towards center.
-    # If I multiply Left side by 0.8 and Right side by 1.2...
-
-    # Let's re-verify the prompt requirement for sign.
-    # "Turning Left (negative Yaw), vertices on the left side should scale closer together"
-    # Left side (x < 0). Yaw < 0.
-    # If I use `1 + Yaw * S * x_norm`:
-    # Yaw=-1, x=-1 -> 1 + (-1)*S*(-1) = 1 + S. (Expand). WRONG.
-    # So it must be MINUS.
-    # `1 - Yaw * S * x_norm`
-    # Yaw=-1, x=-1 -> 1 - (-1)*S*(-1) = 1 - S. (Compress). CORRECT.
-
-    scale_factor = 1.0 - (yaw * compression_strength * x_norm_signed)
-
-    # Apply Displacement THEN Compression?
-    # Or Compression THEN Displacement?
-    # Usually Perspective (Compression) applies to the final view.
-
-    temp_xs = xs + dx
-    new_xs = temp_xs * scale_factor
-    new_ys = ys  # Y usually unchanged or slight scale?
-
-    # Restore
-    new_pts = np.column_stack((new_xs, new_ys)) + center
-    return new_pts
+from deformer import NonLinearParallaxDeformer
+from Const import MODEL_PATH, MODEL_DATA
 
 
 def main():
     # 1. Load Face Mesh
-    # Back up to project root for assets if running from src/practice
     project_root = src_dir.parent
-    image_path = os.path.join(project_root, MODEL_PATH, "Face.png")
+    face_path = os.path.join(project_root, MODEL_PATH, "Face.png")
+    eye_path = os.path.join(project_root, MODEL_PATH, "MouthClose.png")
 
-    print(f"Loading image from: {image_path}")
+    print(f"Loading Face from: {face_path}")
+    print(f"Loading Feature from: {eye_path}")
 
-    # Create Mesh
-    # Use larger max_area to get fewer triangles for clearer debugging initially
-    pts, tris = create_image_mesh(
-        image_path, debug=False, max_area=500, simplify_epsilon=1.0
+    # Create Meshes
+    pts_face, tris_face = create_image_mesh(
+        face_path, debug=False, max_area=500, simplify_epsilon=1.0
     )
 
-    # Center the mesh for easier math
-    center_mean = np.mean(pts, axis=0)
-    pts -= center_mean
+    pts_eye, tris_eye = create_image_mesh(
+        eye_path, debug=False, max_area=100, simplify_epsilon=1.0
+    )
 
-    # Calculate Radius from Face Mesh
-    xs_face = pts[:, 0]
-    width = xs_face.max() - xs_face.min()
-    face_radius = width * 0.75
-    print(f"Face Width: {width:.2f}, Radius: {face_radius:.2f}")
+    # 2. Arrange Positions relative to Face Center (0,0)
 
-    # Define a "Control Point" / "Anchor" for an eye (e.g., Left Eye position approx)
-    # Assume eye is somewhat to the left and up
-    eye_pos = np.array([[-50.0, 50.0]])  # Shape (1, 2)
+    # Get Global Transforms from JSON
+    if "Face" not in MODEL_DATA or "MouthClose" not in MODEL_DATA:
+        print("Error: Missing Face or MouthClose in MODEL_DATA")
+        return
 
-    # 2. Setup Visualization
+    face_info = MODEL_DATA["Face"]
+    eye_info = MODEL_DATA["MouthClose"]
+
+    # Global Coordinates (Pixels in PSD/Canvas)
+    # Convert to Y-Up by negating Y
+    face_global = np.array([face_info["global_center_x"], face_info["global_center_y"]])
+    eye_global = np.array([eye_info["global_center_x"], eye_info["global_center_y"]])
+
+    # Vector from Face Center to Eye Center
+    eye_offset_from_face = eye_global - face_global
+    print(f"Feature Offset from Face: {eye_offset_from_face}")
+
+    # Center the Face Mesh to (0,0)
+    # The loaded pts_face are in local image coordinates (0,0 at top-left of crop)
+    # Flip local Y as well
+
+    # Use Image Dimensions from JSON for True Center
+    # This aligns 100% with the Global Center logic
+    w_face = face_info["original_width"]
+    h_face = face_info["original_height"]
+    # In Y-Up (flipped), center is (w/2, -h/2) because 0,0 was top-left and we negated Y
+    face_local_center = np.array([w_face / 2.0, h_face / 2.0])
+    pts_face -= face_local_center
+
+    # Position the Eye Mesh
+    # 1. Center it locally using ITS OWN dimensions
+    w_eye = eye_info["original_width"]
+    h_eye = eye_info["original_height"]
+    eye_local_center = np.array([w_eye / 2.0, h_eye / 2.0])
+    pts_eye -= eye_local_center
+
+    # 2. Move to offset relative to Face
+    pts_eye += eye_offset_from_face
+
+    pts_face[:, 1] *= -1
+    pts_eye[:, 1] *= -1
+
+    # Calculate Face Radius (for deformation limits)
+    # Use max of width and height to cover full face (especially for tall faces)
+    face_width = w_face
+    face_height = h_face
+
+    max_dim = max(face_width, face_height)
+    face_radius = max_dim * 0.75  # 0.75 of max dimension (~1.5x half-dim)
+
+    print(f"Face Size: {face_width:.2f}x{face_height:.2f}, Radius: {face_radius:.2f}")
+
+    # 3. Setup Visualization
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.set_aspect("equal")
+    # No invert_yaxis needed for Y-Up coordinates
 
-    # Initial Draw
-    def get_verts(current_pts):
-        return [current_pts[t] for t in tris]
+    # Initialize Deformer
+    # Force center to (0,0) to match logic in live2d.py and ensure rotation around the true image center
+    face_deformer = NonLinearParallaxDeformer(pts_face, radius_scale=0, center=(0, 0))
+    # Manually override radius with our calculated max_dim radius
+    face_deformer.radius = face_radius
 
-    poly_coll = PolyCollection(
-        get_verts(pts), edgecolors="black", facecolors="skyblue", alpha=0.5
+    def get_verts(current_pts, current_tris):
+        return [current_pts[t] for t in current_tris]
+
+    face_coll = PolyCollection(
+        get_verts(pts_face, tris_face),
+        edgecolors="black",
+        facecolors="navajowhite",
+        alpha=0.5,
+        label="Face",
     )
-    ax.add_collection(poly_coll)
+    eye_coll = PolyCollection(
+        get_verts(pts_eye, tris_eye),
+        edgecolors="blue",
+        facecolors="white",
+        alpha=0.8,
+        label="Eye",
+    )
 
-    # Landmark/Anchor dot
-    (dot,) = ax.plot([], [], "ro", markersize=10, label="Left Eye Anchor")
-    ax.legend()
+    ax.add_collection(face_coll)
+    ax.add_collection(eye_coll)
 
     # Set bounds
+    all_pts = np.vstack((pts_face, pts_eye))
     margin = 50
-    x_min, x_max = pts[:, 0].min() - margin, pts[:, 0].max() + margin
-    y_min, y_max = pts[:, 1].min() - margin, pts[:, 1].max() + margin
+    x_min, x_max = all_pts[:, 0].min() - margin, all_pts[:, 0].max() + margin
+    y_min, y_max = all_pts[:, 1].min() - margin, all_pts[:, 1].max() + margin
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(y_min, y_max)
 
-    # 3. Animation Loop
+    # 4. Animation Loop
     def update(frame):
         # Oscillate yaw between -1 and 1
         yaw = np.sin(frame * 0.1)
 
-        # Deform Mesh
-        new_pts = deform_mesh(pts, yaw, face_radius)
+        # Deform Mesh using the Class Instance
+        # 1. Deform Face
+        new_face = face_deformer.get_deformed_vertices(yaw)
 
-        # Deform Anchor (Apply same logic)
-        new_eye = deform_mesh(eye_pos, yaw, face_radius)
+        # 2. Deform Eye (Child)
+        # The eye should follow the face's deformation.
+        # Instead of creating a new Deformer for the eye (which would deform it relative to its own center if initialized with eye pts),
+        # we should use the FACE deformer to transform the eye points.
+        # This is CRITICAL for showing correct "Binding" behavior.
+        new_eye, _ = face_deformer.transform_points(pts_eye, yaw)
 
         # Update Plot
-        poly_coll.set_verts(get_verts(new_pts))
-        dot.set_data(new_eye[:, 0], new_eye[:, 1])
+        face_coll.set_verts(get_verts(new_face, tris_face))
+        eye_coll.set_verts(get_verts(new_eye, tris_eye))
 
         ax.set_title(f"Face Deformation (Yaw: {yaw:.2f})")
-        return poly_coll, dot
-
-    # ani = FuncAnimation(fig, update, frames=100, interval=50, blit=True)
-    # plt.show()
+        return face_coll, eye_coll
 
     ani = FuncAnimation(fig, update, frames=60, interval=50, blit=True)
     output_path = os.path.join(src_dir, "practice", "face_turn.gif")
