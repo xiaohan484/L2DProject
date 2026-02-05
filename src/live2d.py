@@ -43,19 +43,19 @@ PART_HIERARCHY = OrderedDict(
             "Body",
             {"type": CFG_FACE_DEFORM, "max_area": 500},
         ),
-        # "BackHair": (
-        #    back_hair_z,
-        #    None,
-        #    "Face",
-        #    {
-        #        "type": CFG_PHYSICS,
-        #        "stiffness": 0.3,
-        #        "fixed_ratio": 0.2,
-        #        "damping": 0.99,
-        #        "lra_stiffness": 0.1,
-        #        "wind_strength": 30.0,
-        #    },
-        # ),
+        "BackHair": (
+            back_hair_z,
+            None,
+            "Face",
+            {
+                "type": CFG_PHYSICS,
+                "stiffness": 0.3,
+                "fixed_ratio": 0.2,
+                "damping": 0.99,
+                "lra_stiffness": 0.1,
+                "wind_strength": 30.0,
+            },
+        ),
         "EyeWhiteL": (face_feature_z, white_response_l, "Face", CFG_GRID),
         "EyeWhiteR": (face_feature_z, white_response_r, "Face", CFG_GRID),
         "EyePupilL": (face_feature_z, pupils_response_l, "Face", CFG_GRID),
@@ -70,20 +70,20 @@ PART_HIERARCHY = OrderedDict(
         "Mouth": (face_feature_z, mouth_response, "Face", CFG_GRID),
         # "FrontHairShadowLeft": (front_shadow_z, None, "Face", CFG_GRID),
         # "FrontHairShadowMiddle": (front_shadow_z, None, "Face", CFG_GRID),
-        # "FrontHairLeft": (
-        #    face_feature_z,
-        #    None,
-        #    "Face",
-        #    {
-        #        "type": CFG_PHYSICS,
-        #        "stiffness": 0.3,
-        #        "fixed_ratio": 0.3,
-        #        "max_area": 500,
-        #        "simplify_epsilon": 1.0,
-        #        "lra_stiffness": 0.8,
-        #        "wind_strength": 50.0,
-        #    },
-        # ),
+        "FrontHairLeft": (
+            face_feature_z,
+            None,
+            "Face",
+            {
+                "type": CFG_PHYSICS,
+                "stiffness": 0.3,
+                "fixed_ratio": 0.3,
+                "max_area": 500,
+                "simplify_epsilon": 1.0,
+                "lra_stiffness": 0.8,
+                "wind_strength": 50.0,
+            },
+        ),
         # "FrontHairRight": (
         #    face_feature_z,
         #    None,
@@ -98,22 +98,22 @@ PART_HIERARCHY = OrderedDict(
         #        "wind_strength": 50.0,
         #    },
         # ),
-        # "FrontHairMiddle": (
-        #    face_feature_z,
-        #    None,
-        #    "Face",
-        #    # CFG_GRID,
-        #    {
-        #        "type": CFG_PHYSICS,
-        #        "stiffness": 0.3,
-        #        "fixed_ratio": 0.2,
-        #        "max_area": 500,
-        #        "damping": 0.8,
-        #        "simplify_epsilon": 1.0,
-        #        "lra_stiffness": 1.0,
-        #        "wind_strength": 20.0,
-        #    },
-        # ),
+        "FrontHairMiddle": (
+            face_feature_z,
+            None,
+            "Face",
+            # CFG_GRID,
+            {
+                "type": CFG_PHYSICS,
+                "stiffness": 0.3,
+                "fixed_ratio": 0.2,
+                "max_area": 500,
+                "damping": 0.8,
+                "simplify_epsilon": 1.0,
+                "lra_stiffness": 1.0,
+                "wind_strength": 20.0,
+            },
+        ),
     }
 )
 
@@ -545,6 +545,7 @@ class Live2DPart:
 
             # 2. Deform the Mesh Vertices (Binding)
             # We want the child's mesh to deform AS IF it were part of the parent's surface.
+            is_mesh_deformed = False
             if hasattr(self.views, "original_vertices") and hasattr(
                 self.views, "update_buffer"
             ):
@@ -576,6 +577,7 @@ class Live2DPart:
                 data_view = self.views.current_vertices.reshape(-1, 4)
                 data_view[:, :2] = child_verts_new_local
                 self.views.update_buffer()
+                is_mesh_deformed = True
 
             # Update Anchor Position
             eff_x = new_eff_x
@@ -585,8 +587,13 @@ class Live2DPart:
             # Multiply existing scale by the deformation scale factors
             # This mainly affects the "Global Scale" of children of this child (if any),
             # or if the view does not support vertex deformation (like a simple Sprite).
-            self.sx *= scales[0]
-            self.sy *= scales[1]
+
+            # FIX: Only apply scaling if we did NOT deform the mesh vertices.
+            # If mesh is deformed, it already contains the compression.
+            # Applying scale on top results in Double Compression.
+            if not is_mesh_deformed:
+                self.sx *= scales[0]
+                self.sy *= scales[1]
 
             # Since we are attached to the surface, we DO NOT add parallax offset
             # because the surface itself has moved (deformed).
@@ -596,11 +603,6 @@ class Live2DPart:
 
             offset_p_x = 0
             offset_p_y = 0
-
-            if self.name == "FaceLandmark":
-                print(
-                    f"[FaceLandmark] Deformed pos: ({eff_x:.1f}, {eff_y:.1f}) Scale: ({self.sx:.2f}, {self.sy:.2f})"
-                )
 
         self.local_matrix = get_local_matrix(
             self.angle,
