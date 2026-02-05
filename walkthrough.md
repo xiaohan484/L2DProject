@@ -39,6 +39,7 @@ $$ Weight = 1.0 - (\frac{r}{R})^3 $$
 ## Key Files
 -   `src/deformer.py`: Contains `NonLinearParallaxDeformer` class.
 -   `src/live2d.py`: Integrates deformer into `Live2DPart.update`.
+    -   **Child Binding**: Child parts (like Mouth) now bind to the Face's surface. They are transformed into the parent's local space, deformed by the parent's deformer, and then mapped back, allowing them to curve and stretch with the face.
 -   `src/practice/face_deformer.py`: Prototype script for testing the math.
 
 ## Usage

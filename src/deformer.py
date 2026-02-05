@@ -107,7 +107,9 @@ class NonLinearParallaxDeformer:
             pts = pts.reshape(1, 2)
 
         # 1. Center them (using Face Center)
-        centered_p = pts
+        # pts are in Anchor Space (same as self.original_pts)
+        # We need them in Center Space for deformation logic
+        centered_p = pts - self.center
 
         # 2. Calculate Weights dynamically
         xs = centered_p[:, 0]

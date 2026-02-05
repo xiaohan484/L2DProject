@@ -16,6 +16,13 @@ from collections import OrderedDict
 import os
 import time
 
+# ToDoList
+# 1. Parent Deformation apply the children
+#    - not apply and transform
+#    - suppose the child has'nt child if its parent is deformable
+#    - direct use parent deformation(add point and deform 3d point)
+#       -> Is Transformation Matrix also need? or do separately?
+
 front_shadow_z = 3
 face_feature_z = 2
 face_base_z = 1
@@ -49,17 +56,17 @@ PART_HIERARCHY = OrderedDict(
         #        "wind_strength": 30.0,
         #    },
         # ),
-        # "EyeWhiteL": (face_feature_z, white_response_l, "Face", CFG_GRID),
-        # "EyeWhiteR": (face_feature_z, white_response_r, "Face", CFG_GRID),
-        # "EyePupilL": (face_feature_z, pupils_response_l, "Face", CFG_GRID),
-        # "EyePupilR": (face_feature_z, pupils_response_r, "Face", CFG_GRID),
-        # "FaceLandmark": (face_feature_z, None, "Face", CFG_GRID),
-        # "EyeLidL": (face_feature_z, lid_response_l, "Face", CFG_GRID),
-        # "EyeLidR": (face_feature_z, lid_response_r, "Face", CFG_GRID),
-        # "EyeLashL": (face_feature_z, lash_response_l, "Face", CFG_GRID),
-        # "EyeLashR": (face_feature_z, lash_response_r, "Face", CFG_GRID),
-        # "EyeBrowL": (face_feature_z, None, "Face", CFG_GRID),
-        # "EyeBrowR": (face_feature_z, None, "Face", CFG_GRID),
+        "EyeWhiteL": (face_feature_z, white_response_l, "Face", CFG_GRID),
+        "EyeWhiteR": (face_feature_z, white_response_r, "Face", CFG_GRID),
+        "EyePupilL": (face_feature_z, pupils_response_l, "Face", CFG_GRID),
+        "EyePupilR": (face_feature_z, pupils_response_r, "Face", CFG_GRID),
+        "FaceLandmark": (face_feature_z, None, "Face", CFG_GRID),
+        "EyeLidL": (face_feature_z, lid_response_l, "Face", CFG_GRID),
+        "EyeLidR": (face_feature_z, lid_response_r, "Face", CFG_GRID),
+        "EyeLashL": (face_feature_z, lash_response_l, "Face", CFG_GRID),
+        "EyeLashR": (face_feature_z, lash_response_r, "Face", CFG_GRID),
+        "EyeBrowL": (face_feature_z, None, "Face", CFG_GRID),
+        "EyeBrowR": (face_feature_z, None, "Face", CFG_GRID),
         "Mouth": (face_feature_z, mouth_response, "Face", CFG_GRID),
         # "FrontHairShadowLeft": (front_shadow_z, None, "Face", CFG_GRID),
         # "FrontHairShadowMiddle": (front_shadow_z, None, "Face", CFG_GRID),
@@ -524,18 +531,60 @@ class Live2DPart:
             # If those vertices are in Parent Local Space (usually centered?), then this works.
 
             # 1. Transform the Anchor Point (offset)
-            print(eff_x, eff_y)
+            # This is the "Origin" of the child in Parent's space
+            child_origin_parent_space = np.array([[eff_x, eff_y]], dtype=np.float64)
+
             deformed_pos, scales = self.parent.deformer.transform_points(
-                [eff_x, eff_y], normalized_yaw, normalized_pitch
+                child_origin_parent_space, normalized_yaw, normalized_pitch
             )
             deformed_pos = deformed_pos[0]
             scales = scales[0]
 
-            eff_x = deformed_pos[0]
-            eff_y = deformed_pos[1]  # Update Y as well for curvature
+            new_eff_x = deformed_pos[0]
+            new_eff_y = deformed_pos[1]
+
+            # 2. Deform the Mesh Vertices (Binding)
+            # We want the child's mesh to deform AS IF it were part of the parent's surface.
+            if hasattr(self.views, "original_vertices") and hasattr(
+                self.views, "update_buffer"
+            ):
+                # a. Get Child Vertices (Local Space relative to Child Origin)
+                # Shape: (N, 4) -> (X, Y, Z, 1)
+                # FIX: original_vertices is 1D flat array [x, y, u, v, ...], need reshape
+                child_verts_local = self.views.original_vertices.reshape(-1, 4)[:, :2]
+
+                # b. Transform to Parent Space
+                # Parent_Pos = Child_Origin_In_Parent + Child_Vert_Local
+                # (Assuming no rotation for now, or rotation handled separately)
+                # Note: eff_x, eff_y include `add_x` which might be animation offset.
+                # Strictly we should use the "Base" position for deformation or the current?
+                # Using current (eff_x) implies animation happens "on surface".
+
+                # N points
+                child_verts_parent_space = child_verts_local + [eff_x, eff_y]
+
+                # c. Deform using Parent Deformer
+                deformed_verts_parent, _ = self.parent.deformer.transform_points(
+                    child_verts_parent_space, normalized_yaw, normalized_pitch
+                )
+
+                # d. Transform back to Child's New Local Space
+                # Child_New_Local = Deformed_Vert_Parent - Deformed_Child_Origin
+                child_verts_new_local = deformed_verts_parent - [new_eff_x, new_eff_y]
+
+                # e. Update Buffer
+                data_view = self.views.current_vertices.reshape(-1, 4)
+                data_view[:, :2] = child_verts_new_local
+                self.views.update_buffer()
+
+            # Update Anchor Position
+            eff_x = new_eff_x
+            eff_y = new_eff_y  # Update Y as well for curvature
 
             # Apply Deformation Scaling (Squash/Stretch) to the child sprite
             # Multiply existing scale by the deformation scale factors
+            # This mainly affects the "Global Scale" of children of this child (if any),
+            # or if the view does not support vertex deformation (like a simple Sprite).
             self.sx *= scales[0]
             self.sy *= scales[1]
 
