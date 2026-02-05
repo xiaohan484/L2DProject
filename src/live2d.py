@@ -468,12 +468,13 @@ class Live2DPart:
         # self.response()
         (offset_x, offset_y) = (0, 0)
         skip = data is None or self.response is None
-        if skip is False:
-            self.response(self, data)
 
         # Reset Scale to Base
         self.sx = self.base_sx
         self.sy = self.base_sy
+
+        if skip is False:
+            self.response(self, data)
 
         # 0. Get Data
         yaw = 0
@@ -530,12 +531,27 @@ class Live2DPart:
             # Yes, `deformer` is created from Parent's Vertices (view.original_vertices).
             # If those vertices are in Parent Local Space (usually centered?), then this works.
 
+            # FIX: User requested "Negative Deform" for Back Hair instead of simple Parallax.
+            # If Z < 0 (Back), we invert the Yaw to simulate the back of the head moving opposite.
+            eff_yaw_deform = normalized_yaw
+            eff_pitch_deform = normalized_pitch
+
+            if self.z_depth < 0:
+                eff_yaw_deform = normalized_yaw * 0.3  # Slightly exaggerated for back
+                # Pitch generally stays same? Or should back tilt opposite?
+                # Cylinder pitch: Back moves opposite?
+                # If Face tilts Down, Top goes Down. Back of head Top goes... Up?
+                # Let's verify Cylinder rotation logic.
+                # Top-Front moves Forward/Down. Top-Back moves Forward/Up.
+                # Let's try inverting pitch too for consistent "Back Side" feeling.
+                eff_pitch_deform = normalized_pitch * 0.5
+
             # 1. Transform the Anchor Point (offset)
             # This is the "Origin" of the child in Parent's space
             child_origin_parent_space = np.array([[eff_x, eff_y]], dtype=np.float64)
 
             deformed_pos, scales = self.parent.deformer.transform_points(
-                child_origin_parent_space, normalized_yaw, normalized_pitch
+                child_origin_parent_space, eff_yaw_deform, eff_pitch_deform
             )
             deformed_pos = deformed_pos[0]
             scales = scales[0]
@@ -566,7 +582,7 @@ class Live2DPart:
 
                 # c. Deform using Parent Deformer
                 deformed_verts_parent, _ = self.parent.deformer.transform_points(
-                    child_verts_parent_space, normalized_yaw, normalized_pitch
+                    child_verts_parent_space, eff_yaw_deform, eff_pitch_deform
                 )
 
                 # d. Transform back to Child's New Local Space
