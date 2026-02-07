@@ -36,12 +36,28 @@ CFG_FACE_DEFORM = 2
 
 PART_HIERARCHY = OrderedDict(
     {
-        "Body": (body_base_z, body_response, None, CFG_GRID),
+        "Body": (
+            body_base_z,
+            body_response,
+            None,
+            {
+                "type": CFG_FACE_DEFORM,
+                "max_area": 2000,  # Coarser mesh for body
+                "simplify_epsilon": 2.0,
+                "deform_ratio_yaw": 0.8,
+                "deform_ratio_pitch": 0.1,
+            },
+        ),
         "Face": (
             face_base_z,
             face_response,
             "Body",
-            {"type": CFG_FACE_DEFORM, "max_area": 500},
+            {
+                "type": CFG_FACE_DEFORM,
+                "max_area": 500,
+                "deform_ratio_yaw": 1.0,
+                "deform_ratio_pitch": 1.0,
+            },
         ),
         "BackHair": (
             back_hair_z,
@@ -157,11 +173,18 @@ def create_live2dpart_each(ctx, name, parent):
     config_type = CFG_GRID
     physics_params = {}
 
+    deform_ratio_yaw = 1.0
+    deform_ratio_pitch = 1.0
+
     if len(args) >= 4:
         cfg = args[3]
         if isinstance(cfg, dict):
             config_type = cfg.get("type", CFG_GRID)
             physics_params = cfg
+            # Support both old 'deform_ratio' and new split ratios
+            base_ratio = cfg.get("deform_ratio", 1.0)
+            deform_ratio_yaw = cfg.get("deform_ratio_yaw", base_ratio)
+            deform_ratio_pitch = cfg.get("deform_ratio_pitch", base_ratio)
         else:
             config_type = cfg
 
@@ -318,6 +341,8 @@ def create_live2dpart_each(ctx, name, parent):
             response=res,
             physics_solver=physics_solver,
             deformer=deformer,
+            deform_ratio_yaw=deform_ratio_yaw,
+            deform_ratio_pitch=deform_ratio_pitch,
         )
     else:
         parent_global = (
@@ -342,6 +367,8 @@ def create_live2dpart_each(ctx, name, parent):
             response=res,
             physics_solver=physics_solver,
             deformer=deformer,
+            deform_ratio_yaw=deform_ratio_yaw,
+            deform_ratio_pitch=deform_ratio_pitch,
         )
 
 
@@ -409,8 +436,12 @@ class Live2DPart:
         response=None,
         physics_solver=None,
         deformer=None,
+        deform_ratio_yaw=1.0,
+        deform_ratio_pitch=1.0,
     ):
         self.name = name
+        self.deform_ratio_yaw = deform_ratio_yaw
+        self.deform_ratio_pitch = deform_ratio_pitch
         # Local space properties
         self.z_depth = z  # For parallax
 
@@ -498,11 +529,13 @@ class Live2DPart:
         if self.deformer is not None:
             # Case A: Self is a Deformable Face
             # 1. Deform Mesh Vertices
-            new_verts = self.deformer.get_deformed_vertices(
-                normalized_yaw, normalized_pitch
-            )
+            # Apply Ratio
+            eff_yaw = normalized_yaw * self.deform_ratio_yaw
+            eff_pitch = normalized_pitch * self.deform_ratio_pitch
 
-            # Update View Buffer
+            new_verts = self.deformer.get_deformed_vertices(
+                eff_yaw, eff_pitch
+            )  # Update View Buffer
             if hasattr(self.views, "current_vertices"):
                 data_view = self.views.current_vertices.reshape(-1, 4)
                 data_view[:, :2] = new_verts[:, :2]
@@ -533,10 +566,19 @@ class Live2DPart:
 
             # FIX: User requested "Negative Deform" for Back Hair instead of simple Parallax.
             # If Z < 0 (Back), we invert the Yaw to simulate the back of the head moving opposite.
-            eff_yaw_deform = normalized_yaw
-            eff_pitch_deform = normalized_pitch
+
+            # KEY FIX: Use the PARENT'S deformation ratio.
+            # If parent (Body) only deformed 15%, we must ask "Where is the anchor on that 15% deformed mesh?"
+            # Using full yaw (100%) would calculate the position on a 100% deformed mesh, which doesn't exist visually.
+            parent_yaw_ratio = getattr(self.parent, "deform_ratio_yaw", 1.0)
+            parent_pitch_ratio = getattr(self.parent, "deform_ratio_pitch", 1.0)
+
+            eff_yaw_deform = normalized_yaw * parent_yaw_ratio
+            eff_pitch_deform = normalized_pitch * parent_pitch_ratio
 
             if self.z_depth < 0:
+                # Back Hair Special Logic
+                # If BackHair is attached to Face (Ratio 1.0), this becomes Yaw * 0.3
                 eff_yaw_deform = normalized_yaw * 0.3  # Slightly exaggerated for back
                 # Pitch generally stays same? Or should back tilt opposite?
                 # Cylinder pitch: Back moves opposite?
@@ -561,9 +603,15 @@ class Live2DPart:
 
             # 2. Deform the Mesh Vertices (Binding)
             # We want the child's mesh to deform AS IF it were part of the parent's surface.
+            # EXCEPTION: If the child has its OWN Deformer (e.g. Face on Body),
+            # we should NOT squash it onto the parent surface.
+            # We only want to move its Anchor Point (handled above).
             is_mesh_deformed = False
-            if hasattr(self.views, "original_vertices") and hasattr(
-                self.views, "update_buffer"
+
+            if (
+                self.deformer is None
+                and hasattr(self.views, "original_vertices")
+                and hasattr(self.views, "update_buffer")
             ):
                 # a. Get Child Vertices (Local Space relative to Child Origin)
                 # Shape: (N, 4) -> (X, Y, Z, 1)
