@@ -12,6 +12,7 @@ from live2d import Live2DPart, create_live2dpart, create_live2dpart_each
 from pubsub import pub
 from filters import OneEuroFilter
 import time
+from PIL import Image
 
 head_yaw_filter = OneEuroFilter(min_cutoff=10, beta=0.1)
 head_pitch_filter = OneEuroFilter(min_cutoff=10, beta=0.1)
@@ -42,10 +43,13 @@ class Live2DEngine(arcade.Window):
         self.last_yaw = 0
         self.total_time = 0
         self.camera = arcade.Camera2D()
-        self.camera.position = (0, 950)
+        self.camera.position = (0, 850)
         self.camera.zoom = 1.5
-        self.hair_bones = None
         self.lives, self.root = create_live2dpart(self.ctx)
+        self.debug_texture = None
+        self.debug_sprite = None
+        self.debug_sprite_list = arcade.SpriteList()
+        self.ui_camera = arcade.Camera2D()
 
     def notify_face_info(self, face_info):
         with self.lock:
@@ -61,6 +65,20 @@ class Live2DEngine(arcade.Window):
         for _, obj in self.lives.items():
             obj.draw()
 
+        if self.debug_sprite:
+            # Switch to UI Camera (fixed screen coordinates)
+            self.ui_camera.use()
+            # Position at Top-Right
+            # Screen coordinates: (0,0) is bottom-left, (W,H) is top-right
+            # Sprite anchor is center
+            border = 0
+            sw = self.debug_sprite.width
+            sh = self.debug_sprite.height
+            self.debug_sprite.center_x = SCREEN_WIDTH - sw / 2 - border
+            self.debug_sprite.center_y = SCREEN_HEIGHT - sh / 2 - border
+            # self.debug_sprite.draw() # AttributeError: 'Sprite' object has no attribute 'draw'
+            self.debug_sprite_list.draw()
+
     def update_pose(self, face_info):
         yaw, pitch, roll = filterHead(face_info["Pose"])
         face_info["Yaw"] = yaw
@@ -75,6 +93,33 @@ class Live2DEngine(arcade.Window):
         self.total_time += delta_time
         self.update_pose(face_info)
         self.root.update(face_info)
+
+        # Update Debug Image
+        debug_img = face_info.get("DebugImage")
+        if debug_img is not None:
+            # debug_img is BGR (from OpenCV) -> RGB
+            rgb_img = debug_img[..., ::-1].copy()
+
+            # Create Texture
+            # Note: Creating a new texture every frame works but can be optimized.
+            # For this task, correctness first.
+            # from PIL import Image
+
+            img_pil = Image.fromarray(rgb_img).convert("RGBA")
+            name = f"debug_tex_{self.total_time}"  # Ensure unique name update?
+            # Or just overwrite? Arcade caches by name?
+            # Actually just creating a new texture object should be fine if not cached globally by name permanently?
+            # Let's try to create a new texture.
+            # Try passing name as kwarg if supported, or just image.
+            # Modern Arcade Texture(image=...)
+            texture = arcade.Texture(image=img_pil)
+
+            if self.debug_sprite is None:
+                self.debug_sprite = arcade.Sprite()
+                self.debug_sprite.scale = 0.5  # Scale down
+                self.debug_sprite_list.append(self.debug_sprite)
+
+            self.debug_sprite.texture = texture
 
 
 class TestMesh(arcade.Window):

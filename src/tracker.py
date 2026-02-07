@@ -159,8 +159,8 @@ class FaceTracker:
     def process(self):
         success, image = self.cap.read()
         image.flags.writeable = False
-        cv2.imshow("tracking result", image)
-        cv2.waitKey(1)
+        # cv2.imshow("tracking result", image)
+        # cv2.waitKey(1)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         # self.results = self.face_mesh.process(image)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image)
@@ -222,7 +222,7 @@ class FaceTracker:
         if results.face_landmarks:
             face_landmarks = results.face_landmarks[0]
         else:
-            return (0, 0, 0)
+            return (0, 0, 0), None
         self.img_w = img_w
         self.img_h = img_h
 
@@ -289,10 +289,10 @@ class FaceTracker:
             if len(frontal_points) > 1:
                 for i in pose_landmark_index:
                     cv2.circle(debug_board, frontal_points[i], 3, (0, 0, 255), -1)
-            cv2.imshow("Debug: Frontalized View", debug_board)
+            # cv2.imshow("Debug: Frontalized View", debug_board)
             # 顯示視窗
-            cv2.waitKey(1)
-        return yaw, pitch, roll
+            # cv2.waitKey(1)
+        return yaw, pitch, roll, debug_board
 
     def get_frontal_landmarks(self, rmat, face_landmarks, img_w, img_h):
         """
@@ -387,7 +387,7 @@ class AsyncFaceTracker:
             # 1. 取得數據 (這一步最耗時，現在不會卡住 UI 了)
             if self._tracker.results is None:
                 continue
-            yaw, pitch, roll = self._tracker.get_head_pose(width, height)
+            yaw, pitch, roll, debug_img = self._tracker.get_head_pose(width, height)
             bl, br = self._tracker.get_eye_blink_ratio()
             dx, dy = self._tracker.get_iris_pos()
             mo = self._tracker.calculate_mouth_openness()
@@ -399,6 +399,7 @@ class AsyncFaceTracker:
                     "Blinking": (bl, br),
                     "MouthOpenness": mo,
                     "Pose": (yaw, pitch, roll),
+                    "DebugImage": debug_img,
                 },
             )
             # 稍微休息一下，避免吃光 CPU (約 60 FPS)
@@ -425,6 +426,7 @@ class FakeTracker:
                 "Blinking": (0, 0),
                 "MouthOpenness": 0,
                 "Pose": (0, 0, 0),
+                "DebugImage": None,
             },
         )
 
@@ -444,7 +446,9 @@ class FakeTracker:
                     "Blinking": (seed, seed),
                     "MouthOpenness": seed,
                     "Pose": (15 * seed, 0, 0),
+                    "Pose": (15 * seed, 0, 0),
                     # "Pose": (0, 0, 0),
+                    "DebugImage": None,
                 },
             )
             # 稍微休息一下，避免吃光 CPU (約 60 FPS)
