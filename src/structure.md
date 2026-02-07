@@ -10,7 +10,8 @@ Please use `uv run ...` instead of `python ...` for future control.
 - **核心邏輯 (Core Logic)**
     - `mainArcade.py`: 程式入口，負責視窗管理、主迴圈、整合各模組。
     - `live2d.py`: 定義 Live2D 模型部件 (Live2DPart) 的層級結構與矩陣更新邏輯。
-    - `deformer.py`: 處理非線性頂點變形 (Non-Linear Vertex Deformation) 以模擬頭部轉動的立體感 (Yaw/Pitch)。
+    - `deformer_system.py`: (NEW) Deformer 介面與實作 (Perspective, Expression)。
+    - `parallax_deformer.py`: (Legacy) 處理非線性頂點變形 (Non-Linear Vertex Deformation) 以模擬頭部轉動的立體感 (Yaw/Pitch)。
     - `Const.py`: 全域常數設定。
 
 - **渲染與網格 (Rendering & Mesh)**
@@ -69,8 +70,18 @@ Please use `uv run ...` instead of `python ...` for future control.
         - **`get_deformed_vertices(yaw, pitch)`**: 輸入旋轉角度，回傳變形後的頂點。
         - **`get_deformed_point(point, yaw, pitch)`**: 輸入單點座標，回傳變形後的座標 (用於子物件定位)。
 
-### 2.1 `deformer.py` (Deformation Logic)
-獨立的變形算法模組。
+### 2.1 `deformer_system.py` (Deformer Stack)
+New modular system for deformation.
+
+#### Classes
+- **`BaseDeformer`**: Abstract interface.
+    - **`transform(vertices, params)`**: Main deformation logic.
+    - **`transform_and_scale(point, params)`**: Helper for child attachment (returns scale).
+- **`PerspectiveDeformer`**: Wraps `NonLinearParallaxDeformer` from `parallax_deformer.py`.
+- **`ExpressionDeformer`**: Placeholder for shape deformations.
+
+### 2.2 `parallax_deformer.py` (Legacy Logic)
+獨立的變形算法模組 (Backend for PerspectiveDeformer).
 
 #### Classes
 - **`NonLinearParallaxDeformer`**

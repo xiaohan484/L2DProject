@@ -9,7 +9,9 @@ try:
 except ImportError:
     pass
 from create_mesh import create_image_mesh, PBDCloth2D
-from deformer import NonLinearParallaxDeformer
+
+# from deformer import NonLinearParallaxDeformer # Removed, using PerspectiveDeformer
+from deformer_system import PerspectiveDeformer
 from Const import MODEL_PATH, MODEL_DATA, GLOBAL_SCALE
 from response import *
 from collections import OrderedDict
@@ -308,7 +310,9 @@ def create_live2dpart_each(ctx, name, parent):
 
         # Initialize Deformer
         # Force center to (0,0) because CustomMesh centers vertices around the pivot (anchor).
-        deformer = NonLinearParallaxDeformer(render_verts, center=(0, 0))
+        deformer = PerspectiveDeformer(render_verts, center=(0, 0))
+        deformer.deform_ratio_yaw = deform_ratio_yaw
+        deformer.deform_ratio_pitch = deform_ratio_pitch
 
     else:
         # Standard GridMesh Setup
@@ -340,9 +344,7 @@ def create_live2dpart_each(ctx, name, parent):
             view=view,
             response=res,
             physics_solver=physics_solver,
-            deformer=deformer,
-            deform_ratio_yaw=deform_ratio_yaw,
-            deform_ratio_pitch=deform_ratio_pitch,
+            deformers=[deformer] if deformer else [],
         )
     else:
         parent_global = (
@@ -366,9 +368,7 @@ def create_live2dpart_each(ctx, name, parent):
             view=view,
             response=res,
             physics_solver=physics_solver,
-            deformer=deformer,
-            deform_ratio_yaw=deform_ratio_yaw,
-            deform_ratio_pitch=deform_ratio_pitch,
+            deformers=[deformer] if deformer else [],
         )
 
 
@@ -435,13 +435,11 @@ class Live2DPart:
         view=None,
         response=None,
         physics_solver=None,
-        deformer=None,
-        deform_ratio_yaw=1.0,
-        deform_ratio_pitch=1.0,
+        deformers=None,
     ):
         self.name = name
-        self.deform_ratio_yaw = deform_ratio_yaw
-        self.deform_ratio_pitch = deform_ratio_pitch
+        self.deformers = deformers if deformers is not None else []
+        # deform_ratio moved to Deformer instance
         # Local space properties
         self.z_depth = z  # For parallax
 
@@ -459,7 +457,7 @@ class Live2DPart:
         self.parent = parent
         self.response = response
         self.physics_solver = physics_solver
-        self.deformer = deformer
+        # self.deformer = deformer # Removed
         self.physics_initialized = False
         if self.physics_solver is not None:
             self.physics_init_local_pos = self.physics_solver.pos.copy()
@@ -526,19 +524,34 @@ class Live2DPart:
         # 1. Calculate Offsets (Parallax vs Deformation)
         (offset_p_x, offset_p_y) = (0, 0)
 
-        if self.deformer is not None:
-            # Case A: Self is a Deformable Face
-            # 1. Deform Mesh Vertices
-            # Apply Ratio
-            eff_yaw = normalized_yaw * self.deform_ratio_yaw
-            eff_pitch = normalized_pitch * self.deform_ratio_pitch
+        # Prepare Params for Deformers
+        # NOTE: PerspectiveDeformer expects degrees (yaw/pitch) or logic inside handle it?
+        # In PerspectiveDeformer.transform, we implemented normalization.
+        # So passing raw degrees is correct.
+        params = {"Yaw": yaw, "Pitch": pitch}
 
-            new_verts = self.deformer.get_deformed_vertices(
-                eff_yaw, eff_pitch
-            )  # Update View Buffer
-            if hasattr(self.views, "current_vertices"):
+        if self.deformers:
+            # Case A: Self is a Deformable Face (or has modifiers)
+            # 1. Deform Mesh Vertices
+
+            # Use original vertices as base to avoid accumulation error?
+            # self.views.current_vertices is modified every frame.
+            # We need the ORIGINAL to apply fresh deformation.
+            # GridMesh/CustomMesh usually has 'original_vertices'.
+
+            if hasattr(self.views, "original_vertices"):
+                # Get copy of original
+                current_verts = self.views.original_vertices.reshape(-1, 4)[
+                    :, :2
+                ].copy()
+
+                # Apply Stack
+                for d in self.deformers:
+                    current_verts = d.transform(current_verts, params)
+
+                # Update View Buffer
                 data_view = self.views.current_vertices.reshape(-1, 4)
-                data_view[:, :2] = new_verts[:, :2]
+                data_view[:, :2] = current_verts[:, :2]
                 self.views.update_buffer()
 
             # 2. Skip Parallax for self (Deformation handles it)
@@ -557,46 +570,48 @@ class Live2DPart:
         eff_x = self.x + self.add_x
         eff_y = self.y + self.add_y
 
-        if self.parent and self.parent.deformer:
-            # Transform my relative position using parent's deformer
-            # Note: My (x, y) are Local Position relative to Parent.
-            # Does deformer work in Local Parent Space?
-            # Yes, `deformer` is created from Parent's Vertices (view.original_vertices).
-            # If those vertices are in Parent Local Space (usually centered?), then this works.
-
-            # FIX: User requested "Negative Deform" for Back Hair instead of simple Parallax.
-            # If Z < 0 (Back), we invert the Yaw to simulate the back of the head moving opposite.
-
-            # KEY FIX: Use the PARENT'S deformation ratio.
-            # If parent (Body) only deformed 15%, we must ask "Where is the anchor on that 15% deformed mesh?"
-            # Using full yaw (100%) would calculate the position on a 100% deformed mesh, which doesn't exist visually.
-            parent_yaw_ratio = getattr(self.parent, "deform_ratio_yaw", 1.0)
-            parent_pitch_ratio = getattr(self.parent, "deform_ratio_pitch", 1.0)
-
-            eff_yaw_deform = normalized_yaw * parent_yaw_ratio
-            eff_pitch_deform = normalized_pitch * parent_pitch_ratio
-
-            if self.z_depth < 0:
-                # Back Hair Special Logic
-                # If BackHair is attached to Face (Ratio 1.0), this becomes Yaw * 0.3
-                eff_yaw_deform = normalized_yaw * 0.3  # Slightly exaggerated for back
-                # Pitch generally stays same? Or should back tilt opposite?
-                # Cylinder pitch: Back moves opposite?
-                # If Face tilts Down, Top goes Down. Back of head Top goes... Up?
-                # Let's verify Cylinder rotation logic.
-                # Top-Front moves Forward/Down. Top-Back moves Forward/Up.
-                # Let's try inverting pitch too for consistent "Back Side" feeling.
-                eff_pitch_deform = normalized_pitch * 0.5
+        if self.parent and self.parent.deformers:
+            # Transform my relative position using parent's deformers
 
             # 1. Transform the Anchor Point (offset)
             # This is the "Origin" of the child in Parent's space
             child_origin_parent_space = np.array([[eff_x, eff_y]], dtype=np.float64)
 
-            deformed_pos, scales = self.parent.deformer.transform_points(
-                child_origin_parent_space, eff_yaw_deform, eff_pitch_deform
-            )
-            deformed_pos = deformed_pos[0]
-            scales = scales[0]
+            # Iteratively Apply Parent Deformers to Anchor
+            current_pos = child_origin_parent_space
+            total_scales = np.array([1.0, 1.0])
+
+            # We need to handle BackHair special case "Negative Deform".
+            # This logic was: if z < 0, invert pitch/yaw ratios.
+            # But ratios are now inside the Deformer.
+            # How to handle BackHair?
+            # BackHair is a child. It attaches to Face.
+            # Face has PerspectiveDeformer.
+            # We want BackHair to attach to the "Back" of the Face.
+            # This is a specific behavior of Perspective deformation on Back objects.
+            # Ideally, PerspectiveDeformer should handle this if we pass a flag?
+            # Or we modify `params` for the BackHair specifically?
+
+            # The logic was: `eff_yaw_deform = normalized_yaw * 0.3`.
+            # If we pass Modified Params to existing Deformer?
+            # Deformer uses `self.deform_ratio`.
+            # If we want 0.3 effectively, and ratio is 1.0. We pass yaw * 0.3.
+
+            current_params = params.copy()
+            if self.z_depth < 0:
+                # Hack for BackHair: Reduce rotation effect
+                # (Simulating attachment to back side which moves less/opposite?)
+                # Previous logic: yaw * 0.3, pitch * 0.5
+                current_params["Yaw"] = yaw * 0.3
+                current_params["Pitch"] = pitch * 0.5
+
+            for d in self.parent.deformers:
+                current_pos, scales = d.transform_and_scale(current_pos, current_params)
+                # Accumulate scales? (Multiply)
+                total_scales *= scales[0]  # Take first point scale
+
+            deformed_pos = current_pos[0]
+            scales = total_scales
 
             new_eff_x = deformed_pos[0]
             new_eff_y = deformed_pos[1]
@@ -609,7 +624,7 @@ class Live2DPart:
             is_mesh_deformed = False
 
             if (
-                self.deformer is None
+                not self.deformers
                 and hasattr(self.views, "original_vertices")
                 and hasattr(self.views, "update_buffer")
             ):
@@ -628,10 +643,12 @@ class Live2DPart:
                 # N points
                 child_verts_parent_space = child_verts_local + [eff_x, eff_y]
 
-                # c. Deform using Parent Deformer
-                deformed_verts_parent, _ = self.parent.deformer.transform_points(
-                    child_verts_parent_space, eff_yaw_deform, eff_pitch_deform
-                )
+                # c. Deform using Parent Deformers Stack
+                current_verts_p = child_verts_parent_space
+                for d in self.parent.deformers:
+                    current_verts_p = d.transform(current_verts_p, current_params)
+
+                deformed_verts_parent = current_verts_p
 
                 # d. Transform back to Child's New Local Space
                 # Child_New_Local = Deformed_Vert_Parent - Deformed_Child_Origin

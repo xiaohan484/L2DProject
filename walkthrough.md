@@ -36,11 +36,18 @@ $$ Weight = 1.0 - (\frac{r}{R})^3 $$
     $$ ScaleY = 1.0 + (Pitch \times Strength \times \frac{y}{R}) $$
     *(Note: The sign is flipped compared to Yaw due to Y-axis orientation).*
 
+### 3. Architecture Refactor: Deformer Stack
+To support multiple types of deformation (e.g., Expression + Perspective), we refactored `Live2DPart` to use a **Deformer Stack**.
+- **Before**: `Live2DPart` had a single `self.deformer` (hardcoded for Perspective).
+- **After**: `Live2DPart` has `self.deformers = []`. Vertices are passed through each deformer sequentially.
+- **Child Attachment**: Child parts attach to the parent's *deformed surface* by running their anchor point through the parent's deformer stack.
+
 ## Key Files
--   `src/deformer.py`: Contains `NonLinearParallaxDeformer` class.
--   `src/live2d.py`: Integrates deformer into `Live2DPart.update`.
-    -   **Child Binding**: Child parts (like Mouth) now bind to the Face's surface. They are transformed into the parent's local space, deformed by the parent's deformer, and then mapped back, allowing them to curve and stretch with the face.
--   `src/practice/face_deformer.py`: Prototype script for testing the math.
+- `src/deformer_system.py`: (Was `deformers.py`) System interface and wrappers.
+- `src/parallax_deformer.py`: (Was `deformer.py`) Core math for parallax.
+- `src/live2d.py`: Integrates `Deformer Stack` into `Live2DPart.update`.
+- `tests/test_deformer.py`: Unit tests for deformation math.
+- `tests/test_live2d_part.py`: Unit tests for hierarchy and stack logic.
 
 ## Usage
 Head rotation is automatically driven by the `tracker.py` data (MediaPipe Face Mesh).
